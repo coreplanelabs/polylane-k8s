@@ -1,0 +1,216 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "polylane-k8s.fullname" . }}
+  labels:
+    {{- include "polylane-k8s.labels" . | nindent 4 }}
+spec:
+  # Recreate: the old agent must stop before the new one starts so two
+  # agents never fight over the same tunnel credentials.
+  replicas: {{ .Values.replicaCount }}
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "polylane-k8s.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "polylane-k8s.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      annotations:
+        checksum/config: {{ include "polylane-k8s.config" . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "polylane-k8s.serviceAccountName" . }}
+      # The SA token reaches the pod only through the projected volume
+      # below (1h expiry); nothing is auto-mounted.
+      automountServiceAccountToken: false
+      # 70s: outlives the agent's 25s shim drain plus cloudflared's own
+      # connection teardown, with room to spare.
+      terminationGracePeriodSeconds: 70
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      initContainers:
+        # Native sidecar (initContainer + restartPolicy Always): the agent
+        # starts first and its startupProbe gates cloudflared, so the
+        # tunnel only comes up after registration has persisted
+        # credentials into the state Secret.
+        - name: agent
+          restartPolicy: Always
+          image: {{ include "polylane-k8s.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: ["run", "--config", "/etc/polylane/config.yaml"]
+          env:
+            - name: POLYLANE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "polylane-k8s.apiKeySecretName" . }}
+                  key: {{ .Values.apiKey.secretKey }}
+            - name: CHART_VERSION
+              value: {{ .Chart.Version | quote }}
+            {{- with .Values.proxy.httpsProxy }}
+            - name: HTTPS_PROXY
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with .Values.proxy.noProxy }}
+            - name: NO_PROXY
+              value: {{ . | quote }}
+            {{- end }}
+            {{- if .Values.customCA.existingSecret }}
+            - name: SSL_CERT_FILE
+              value: /etc/polylane-ca/{{ .Values.customCA.key }}
+            {{- end }}
+          ports:
+            - name: health
+              containerPort: 8081
+            - name: metrics
+              containerPort: 9090
+          # 1-hour startup budget: cold-boot registration rides out
+          # platform outages in infinite jittered backoff (COR-32 §1.3);
+          # kubelet kills during that window would fake the CrashLoopBackOff
+          # signal the spec reserves for rejected credentials. Startup
+          # probes cost nothing once passed.
+          startupProbe:
+            httpGet:
+              path: /startupz
+              port: health
+            periodSeconds: 5
+            failureThreshold: 720
+          # Liveness is process health only — it must never depend on the
+          # tunnel or the platform, so an external outage cannot
+          # crash-loop customer pods.
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: health
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: health
+            periodSeconds: 5
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65532
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+            - name: kube-api-access
+              mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+              readOnly: true
+            - name: config
+              mountPath: /etc/polylane
+              readOnly: true
+            {{- if .Values.customCA.existingSecret }}
+            - name: custom-ca
+              mountPath: /etc/polylane-ca
+              readOnly: true
+            {{- end }}
+      containers:
+        - name: cloudflared
+          image: {{ include "polylane-k8s.tunnelImage" . | quote }}
+          {{- with .Values.tunnel.command }}
+          command:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- if .Values.tunnel.args }}
+          args:
+            {{- toYaml .Values.tunnel.args | nindent 12 }}
+          {{- else }}
+          args: ["tunnel", "--no-autoupdate", "--metrics", "0.0.0.0:2000", "run"]
+          {{- end }}
+          env:
+            # Whole-dir Secret mount, no subPath: kubelet propagates
+            # updates, so a rotated token lands without a pod restart.
+            - name: TUNNEL_TOKEN_FILE
+              value: /var/lib/polylane/state/tunnelToken
+          ports:
+            - name: tunnel-metrics
+              containerPort: 2000
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: tunnel-metrics
+            periodSeconds: 5
+          # Generous thresholds: a Cloudflare outage must surface as
+          # NotReady, never as a kill loop.
+          livenessProbe:
+            httpGet:
+              path: /ready
+              port: tunnel-metrics
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            failureThreshold: 10
+          resources:
+            {{- toYaml .Values.tunnel.resources | nindent 12 }}
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65532
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+            - name: state
+              mountPath: /var/lib/polylane/state
+              readOnly: true
+      volumes:
+        # Hand-rolled kube-api-access: automount is off, so this projected
+        # trio (short-lived token, cluster CA, namespace) is the agent's
+        # entire kube identity.
+        - name: kube-api-access
+          projected:
+            defaultMode: 420
+            sources:
+              - serviceAccountToken:
+                  expirationSeconds: 3600
+                  path: token
+              - configMap:
+                  name: kube-root-ca.crt
+                  items:
+                    - key: ca.crt
+                      path: ca.crt
+              - downwardAPI:
+                  items:
+                    - path: namespace
+                      fieldRef:
+                        fieldPath: metadata.namespace
+        - name: state
+          secret:
+            secretName: {{ include "polylane-k8s.stateSecretName" . }}
+        - name: config
+          configMap:
+            name: {{ include "polylane-k8s.fullname" . }}-config
+        {{- if .Values.customCA.existingSecret }}
+        - name: custom-ca
+          secret:
+            secretName: {{ .Values.customCA.existingSecret }}
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

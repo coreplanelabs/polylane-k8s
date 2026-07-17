@@ -1,0 +1,68 @@
+---
+name: ci
+
+"on":
+  workflow_dispatch:
+  pull_request:
+  merge_group:
+  push:
+    branches: ["main"]
+
+permissions:
+  contents: read
+
+env:
+  CI: "true"
+
+jobs:
+  do:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+
+      - name: Activate Hermit
+        uses: cashapp/activate-hermit@cea9af7913204a965fd488637a8d1811bba2e616 # v1
+        with:
+          cache: "true"
+
+      - name: Run quality checks
+        run: task do
+
+      - name: Run full test suite with race detection
+        run: task test:full
+
+      - name: Verify generated files are committed
+        run: git diff --exit-code
+
+  e2e:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+
+      - name: Activate Hermit
+        uses: cashapp/activate-hermit@cea9af7913204a965fd488637a8d1811bba2e616 # v1
+        with:
+          cache: "true"
+
+      # ubuntu-24.04 runners ship a working Docker daemon, which kind needs.
+      - name: Run end-to-end tests (kind cluster + fakeplatform)
+        run: task e2e
+
+  check:
+    if: always()
+    needs:
+      - do
+      - e2e
+    runs-on: ubuntu-24.04
+    permissions: {}
+    steps:
+      - name: Decide whether the needed jobs succeeded or failed
+        uses: re-actors/alls-green@05ac9388f0aebcb5727afa17fcccfecd6f8ec5fe # release/v1
+        with:
+          jobs: ${{ toJSON(needs) }}

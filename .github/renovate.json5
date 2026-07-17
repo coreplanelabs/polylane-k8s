@@ -1,0 +1,54 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:best-practices",
+    ":ignoreUnstable"
+  ],
+  "packageRules": [
+    {
+      // The chart's own image: values.yaml deliberately ships tag: ""
+      // (it follows the chart's appVersion, which release-please bumps).
+      // Renovate's pinDigests otherwise rewrites it to "@sha256:...",
+      // which renders the malformed ghcr.io/...:@sha256:... reference.
+      "matchManagers": [
+        "helm-values"
+      ],
+      "matchPackageNames": [
+        "ghcr.io/coreplanelabs/polylane-k8s"
+      ],
+      "enabled": false
+    },
+    {
+      "matchManagers": [
+        "github-actions"
+      ],
+      "automerge": true
+    },
+    {
+      // Minor/patch automerge doubles as the cloudflared supply line: the
+      // sidecar image is tag+digest pinned in the chart values, so a
+      // cloudflared CVE fix rides one of these PRs and ships on the next
+      // chart publish — days of lag, no agent release needed.
+      "matchUpdateTypes": [
+        "minor",
+        "patch"
+      ],
+      "automerge": true
+    }
+  ],
+  "lockFileMaintenance": {
+    "enabled": true,
+    "automerge": true
+  },
+  "prConcurrentLimit": 6,
+  "prHourlyLimit": 12,
+  "vulnerabilityAlerts": {
+    "labels": [
+      "security"
+    ],
+    "schedule": [
+      "before 8am"
+    ],
+    "prConcurrentLimit": 6
+  }
+}

@@ -26,7 +26,25 @@ go.work.sum
 
 # env file
 .env
+.envrc.local
 
 # Editor/IDE
 # .idea/
 # .vscode/
+
+# OS-specific files
+.DS_Store
+
+# Tooling state
+.hermit/
+.task/
+
+# Build output
+dist/
+
+# Bare `go build` outputs at the repo root (task build uses dist/)
+/polylane-k8s
+/fakeplatform
+
+# Claude Code session state
+.claude/

@@ -1,0 +1,27 @@
+{{- if .Values.networkPolicy.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "polylane-k8s.fullname" . }}
+  labels:
+    {{- include "polylane-k8s.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "polylane-k8s.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+    - Egress
+  # The shim listens on loopback and is reachable only through the
+  # tunnel, so the pod's only legitimate ingress is ops scraping (kubelet
+  # probes bypass NetworkPolicy). Egress stays open: the agent needs the
+  # kube API and the platform, cloudflared needs Cloudflare's edge, and
+  # both need DNS.
+  ingress:
+    - ports:
+        - port: 8081
+        - port: 9090
+  egress:
+    - {}
+{{- end }}

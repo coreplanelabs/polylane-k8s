@@ -1,0 +1,14 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "polylane-k8s.fullname" . }}-config
+  labels:
+    {{- include "polylane-k8s.labels" . | nindent 4 }}
+data:
+  # .Values.config rendered verbatim over chart-derived keys: the shim and
+  # ops listeners are spelled out so the rendered file is self-describing,
+  # and state_secret.name always points at the Secret this chart creates
+  # and RBAC-pins.
+  config.yaml: |
+    {{- include "polylane-k8s.config" . | nindent 4 }}

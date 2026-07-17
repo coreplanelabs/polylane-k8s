@@ -1,0 +1,157 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "polylane-k8s Helm values",
+  "type": "object",
+  "allOf": [
+    {
+      "$comment": "Exactly one API key source: apiKey.existingSecret XOR polylane.apiKey.",
+      "oneOf": [
+        {
+          "required": ["apiKey"],
+          "properties": {
+            "apiKey": {
+              "required": ["existingSecret"],
+              "properties": {
+                "existingSecret": {"type": "string", "minLength": 1}
+              }
+            },
+            "polylane": {
+              "properties": {
+                "apiKey": {"type": "string", "maxLength": 0}
+              }
+            }
+          }
+        },
+        {
+          "required": ["polylane"],
+          "properties": {
+            "polylane": {
+              "required": ["apiKey"],
+              "properties": {
+                "apiKey": {"type": "string", "minLength": 1}
+              }
+            },
+            "apiKey": {
+              "properties": {
+                "existingSecret": {"type": "string", "maxLength": 0}
+              }
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "properties": {
+    "apiKey": {
+      "type": "object",
+      "properties": {
+        "existingSecret": {"type": "string"},
+        "secretKey": {"type": "string", "minLength": 1}
+      }
+    },
+    "polylane": {
+      "type": "object",
+      "properties": {
+        "apiKey": {"type": "string"}
+      }
+    },
+    "config": {"type": "object"},
+    "stateSecret": {
+      "type": "object",
+      "properties": {
+        "name": {"type": "string"}
+      }
+    },
+    "image": {
+      "type": "object",
+      "properties": {
+        "repository": {"type": "string", "minLength": 1},
+        "tag": {"type": "string"},
+        "digest": {"type": "string", "pattern": "^$|^sha256:[a-f0-9]{64}$"},
+        "pullPolicy": {"enum": ["Always", "IfNotPresent", "Never"]}
+      }
+    },
+    "tunnel": {
+      "type": "object",
+      "properties": {
+        "image": {
+          "type": "object",
+          "properties": {
+            "repository": {"type": "string", "minLength": 1},
+            "tag": {"type": "string"},
+            "digest": {"type": "string", "pattern": "^$|^sha256:[a-f0-9]{64}$"}
+          }
+        },
+        "command": {"type": "array", "items": {"type": "string"}},
+        "args": {"type": "array", "items": {"type": "string"}},
+        "resources": {"type": "object"}
+      }
+    },
+    "resources": {"type": "object"},
+    "metrics": {
+      "type": "object",
+      "properties": {
+        "service": {
+          "type": "object",
+          "properties": {
+            "enabled": {"type": "boolean"}
+          }
+        },
+        "serviceMonitor": {
+          "type": "object",
+          "properties": {
+            "enabled": {"type": "boolean"},
+            "interval": {"type": "string"},
+            "labels": {"type": "object"}
+          }
+        }
+      }
+    },
+    "proxy": {
+      "type": "object",
+      "properties": {
+        "httpsProxy": {"type": "string"},
+        "noProxy": {"type": "string"}
+      }
+    },
+    "customCA": {
+      "type": "object",
+      "properties": {
+        "existingSecret": {"type": "string"},
+        "key": {"type": "string", "minLength": 1}
+      }
+    },
+    "networkPolicy": {
+      "type": "object",
+      "properties": {
+        "enabled": {"type": "boolean"}
+      }
+    },
+    "replicaCount": {
+      "$comment": "v1 is single-replica: one tunnel, one agent, no leader election.",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "serviceAccount": {
+      "type": "object",
+      "properties": {
+        "create": {"type": "boolean"},
+        "name": {"type": "string"},
+        "annotations": {"type": "object"}
+      }
+    },
+    "rbac": {
+      "type": "object",
+      "properties": {
+        "create": {"type": "boolean"}
+      }
+    },
+    "imagePullSecrets": {"type": "array"},
+    "podAnnotations": {"type": "object"},
+    "podLabels": {"type": "object"},
+    "nodeSelector": {"type": "object"},
+    "tolerations": {"type": "array"},
+    "affinity": {"type": "object"}
+  }
+}

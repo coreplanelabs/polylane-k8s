@@ -1,0 +1,111 @@
+---
+# Polylane Kubernetes agent Helm values.
+#
+# The one mental model: `config` below IS the agent's config.yaml, rendered
+# verbatim into a ConfigMap on top of chart-derived keys (the shim/ops
+# listeners and state_secret.name are spelled out chart-side so the
+# rendered file is self-describing). Everything else is Kubernetes
+# plumbing: a native-sidecar Deployment (agent + cloudflared), enumerated
+# read-only RBAC, and a pre-created state Secret the agent persists its
+# registration into.
+
+# Exactly one of apiKey.existingSecret or polylane.apiKey must be set —
+# values.schema.json enforces it.
+apiKey:
+  # Name of an existing Secret holding the Polylane API key. Preferred:
+  # the key never touches Helm release storage.
+  existingSecret: ""
+  # Key inside that Secret.
+  secretKey: api-key
+
+polylane:
+  # Convenience for --set: the chart templates its own Secret from this.
+  apiKey: ""
+
+# The agent's config.yaml, verbatim (snake_case keys). Anything set here
+# overrides the chart-derived defaults — except state_secret.name, which
+# always points at the Secret this chart creates and RBAC-pins.
+config: {}
+#  cluster_name: prod-us-east
+#  distribution: eks
+
+stateSecret:
+  # Name of the pre-created state Secret. Empty means <fullname>-state.
+  name: ""
+
+image:
+  repository: ghcr.io/coreplanelabs/polylane-k8s
+  # Empty tag follows the chart's appVersion (the matching release).
+  tag: ""
+  # Non-empty digest wins over tag (Renovate pins it).
+  digest: ""
+  pullPolicy: IfNotPresent
+
+tunnel:
+  image:
+    repository: docker.io/cloudflare/cloudflared
+    tag: "2026.7.2"
+    # Non-empty digest wins over tag (Renovate tracks and bumps it).
+    digest: "sha256:4f6655284ab3d252b7f28fedb19fe6c8fc82ee5b1295c20ac74d475e5398a52d"
+  # command/args override the cloudflared invocation (the kind e2e swaps
+  # in a stub image). Empty means the real thing:
+  #   ["tunnel", "--no-autoupdate", "--metrics", "0.0.0.0:2000", "run"]
+  command: []
+  args: []
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      memory: 256Mi
+
+# Agent container resources.
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    memory: 256Mi
+
+metrics:
+  service:
+    enabled: false
+  serviceMonitor:
+    # Also requires metrics.service.enabled.
+    enabled: false
+    interval: 30s
+    labels: {}
+
+# Corporate egress: forwarded to the agent as HTTPS_PROXY/NO_PROXY for its
+# platform calls (the kube API stays in-cluster).
+proxy:
+  httpsProxy: ""
+  noProxy: ""
+
+# TLS-intercepting middleboxes: an existing Secret holding the extra CA
+# bundle, exposed to the agent via SSL_CERT_FILE.
+customCA:
+  existingSecret: ""
+  key: ca.crt
+
+networkPolicy:
+  enabled: false
+
+# v1 is single-replica by design (the schema caps it at 1): one tunnel,
+# one agent, no leader election.
+replicaCount: 1
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+rbac:
+  create: true
+
+imagePullSecrets: []
+podAnnotations: {}
+podLabels: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}

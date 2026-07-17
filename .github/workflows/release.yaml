@@ -1,0 +1,70 @@
+---
+name: release-please
+
+"on":
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  release-please:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      pull-requests: write
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+      version: ${{ steps.release.outputs.version }}
+    steps:
+      - name: Generate a GitHub token
+        id: generate-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3
+        with:
+          # Org bot secrets — provision these in the coreplanelabs org
+          # before the first release.
+          client-id: ${{ secrets.COREPLANE_BOT_CLIENT_ID }}
+          private-key: ${{ secrets.COREPLANE_BOT_PRIVATE_SIGNING_KEY }}
+          owner: ${{ github.repository_owner }}
+
+      - name: Create or update release PR
+        id: release
+        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5
+        with:
+          token: ${{ steps.generate-token.outputs.token }}
+          target-branch: ${{ github.ref_name }}
+
+  # The Helm chart ships as an OCI artifact alongside the images.
+  # Chart.yaml's version/appVersion are bumped by release-please in the
+  # release commit itself, so packaging the tagged tree is all it takes.
+  publish-chart:
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          ref: ${{ needs.release-please.outputs.tag_name }}
+
+      - name: Activate Hermit
+        uses: cashapp/activate-hermit@cea9af7913204a965fd488637a8d1811bba2e616 # v1
+        with:
+          cache: "true"
+
+      - name: Log in to GHCR for Helm
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | \
+            helm registry login ghcr.io --username "${{ github.repository_owner }}" --password-stdin
+
+      - name: Package and push chart
+        run: |-
+          helm package charts/polylane-k8s --destination dist/
+          helm push "dist/polylane-k8s-${{ needs.release-please.outputs.version }}.tgz" \
+            "oci://ghcr.io/${{ github.repository_owner }}/charts"
