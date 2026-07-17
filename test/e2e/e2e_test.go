@@ -208,8 +208,8 @@ spec:
 			{"create", "pods/exec", nil, false},
 			{"create", "pods", nil, false},
 			{"delete", "pods", nil, false},
-			{"update", "secrets", []string{"--resource-name", release + "-state"}, true}, // the one pinned write
-			{"update", "secrets", []string{"--resource-name", "polylane-api-key"}, false},
+			{"update", "secrets/" + release + "-state", nil, true}, // the one pinned write
+			{"update", "secrets/polylane-api-key", nil, false},
 			{"create", "secrets", nil, false},
 		}
 		for _, c := range checks {
