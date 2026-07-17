@@ -1,0 +1,166 @@
+# Taskfile for polylane-k8s — minimal read-only in-cluster Kubernetes agent
+#
+# Key commands:
+#   task do       - Run all quality checks (generate, format, lint, test, build)
+#   task test     - Run Go tests
+#   task e2e      - Run end-to-end tests (kind cluster + fakeplatform; needs docker)
+#   task e2e:cf   - Manual UAT against a real Cloudflare tunnel + Polylane platform
+#
+---
+version: "3"
+
+vars:
+  CPU_COUNT:
+    sh: nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo "4"
+  PARALLEL_COUNT:
+    sh: echo $(({{.CPU_COUNT}} * 2))
+  GIT_COMMIT:
+    sh: git rev-parse --short HEAD 2>/dev/null || echo "unknown"
+  BUILD_TIME:
+    sh: date -u +%Y-%m-%dT%H:%M:%SZ
+  LDFLAGS: "-X github.com/coreplanelabs/polylane-k8s/internal/buildinfo.Commit={{.GIT_COMMIT}} -X github.com/coreplanelabs/polylane-k8s/internal/buildinfo.BuildTime={{.BUILD_TIME}}"
+
+tasks:
+  do:
+    desc: "Run all quality checks"
+    cmds:
+      - task: generate
+      - task: format
+      - task: lint
+      - task: test
+      - task: build
+
+  init:
+    desc: "Download Go module dependencies"
+    dir: "{{.TASKFILE_DIR}}"
+    cmds:
+      - go mod download
+
+  generate:
+    desc: "Generate Go code"
+    dir: "{{.TASKFILE_DIR}}"
+    sources:
+      - "**/*.go"
+      - "go.mod"
+      - "go.sum"
+    cmds:
+      - go generate ./...
+
+  format:
+    desc: "Format the codebase"
+    aliases: [f, fmt]
+    dir: "{{.TASKFILE_DIR}}"
+    cmds:
+      - go fmt ./...
+      - task: format:yaml
+
+  format:yaml:
+    desc: "Run the yamlfmt formatter on all yaml files (charts/ is Helm's)"
+    dir: "{{.TASKFILE_DIR}}"
+    cmds:
+      # charts/ is excluded: templates are not valid YAML, and
+      # release-please rewrites Chart.yaml in its own style every release.
+      # Formatter settings ride the command line so there is no separate
+      # .yamlfmt file to drift out of sync.
+      - git ls-files -co --exclude-standard '*.yaml' '*.yml' ':!charts' | xargs yamlfmt -formatter retain_line_breaks=true,include_document_start=true
+
+  lint:
+    desc: "Lint the codebase"
+    aliases: [l]
+    dir: "{{.TASKFILE_DIR}}"
+    sources:
+      - "**/*.go"
+      - "go.mod"
+      - "go.sum"
+      - ".golangci.yml"
+      - "charts/**/*"
+    cmds:
+      - golangci-lint run ./...
+      - task: lint:chart
+
+  lint:chart:
+    desc: "Lint and schema-validate the Helm chart"
+    dir: "{{.TASKFILE_DIR}}"
+    cmds:
+      # The values schema demands exactly one of apiKey.existingSecret or
+      # polylane.apiKey, so every render sets one. Three passes: each API
+      # key path, then every optional toggle on so conditional templates
+      # are schema-validated too.
+      - helm lint --quiet charts/polylane-k8s --set apiKey.existingSecret=k
+      - helm template polylane charts/polylane-k8s --set apiKey.existingSecret=k | kubeconform -strict -ignore-missing-schemas
+      - helm template polylane charts/polylane-k8s --set polylane.apiKey=sk_x | kubeconform -strict -ignore-missing-schemas
+      - helm template polylane charts/polylane-k8s --set apiKey.existingSecret=k --set metrics.service.enabled=true --set metrics.serviceMonitor.enabled=true --set networkPolicy.enabled=true --set proxy.httpsProxy=http://proxy.corp:3128 --set proxy.noProxy=10.0.0.0/8 --set customCA.existingSecret=corp-ca | kubeconform -strict -ignore-missing-schemas
+
+  lint:vet:
+    desc: "Run go vet only"
+    dir: "{{.TASKFILE_DIR}}"
+    cmds:
+      - go vet -p {{.CPU_COUNT}} ./...
+
+  test:
+    desc: "Run Go tests"
+    aliases: [t]
+    dir: "{{.TASKFILE_DIR}}"
+    cmds:
+      - go test -p {{.CPU_COUNT}} -parallel {{.PARALLEL_COUNT}} ./...
+
+  test:full:
+    desc: "Full test suite with race detection and coverage (CI)"
+    aliases: [tfull]
+    dir: "{{.TASKFILE_DIR}}"
+    cmds:
+      - go test -race -p {{.CPU_COUNT}} -parallel {{.PARALLEL_COUNT}} -cover ./...
+
+  test:chart:
+    desc: "Run the chart render tests (RBAC invariants, loopback shim, kubeconform)"
+    dir: "{{.TASKFILE_DIR}}"
+    cmds:
+      - go test -p {{.CPU_COUNT}} -parallel {{.PARALLEL_COUNT}} ./test/chart/...
+
+  build:
+    desc: "Build all binaries"
+    deps:
+      - build::polylane-k8s
+      - build::fakeplatform
+
+  build::*:
+    vars:
+      BINARY_NAME: "{{index .MATCH 0}}"
+    dir: "{{.TASKFILE_DIR}}"
+    desc: "Build the {{.BINARY_NAME}} binary"
+    sources:
+      - "internal/**/*.go"
+      - "cmd/{{.BINARY_NAME}}/**/*.go"
+      - "go.mod"
+      - "go.sum"
+    generates:
+      - "dist/{{.BINARY_NAME}}"
+    cmds:
+      - CGO_ENABLED=0 go build -ldflags '{{.LDFLAGS}}' -o dist/{{.BINARY_NAME}} ./cmd/{{.BINARY_NAME}}
+
+  e2e:
+    desc: "Run end-to-end tests (kind cluster + fakeplatform; requires docker)"
+    dir: "{{.TASKFILE_DIR}}"
+    cmds:
+      - go test -tags e2e -count 1 -timeout 20m ./test/e2e/...
+
+  e2e:cf:
+    desc: "Manual UAT against a real Cloudflare tunnel + Polylane platform"
+    dir: "{{.TASKFILE_DIR}}"
+    cmds:
+      - |
+        echo "e2e:cf drives a REAL registration: it creates a tunnel via the"
+        echo "Polylane platform and proxies through Cloudflare's edge."
+        echo
+        echo "Prerequisites (the test fails fast without them):"
+        echo "  POLYLANE_E2E_API_KEY       API key scoped cloud_accounts:write"
+        echo "  POLYLANE_E2E_PLATFORM_URL  platform base URL (e.g. a staging env)"
+        echo
+      - go test -tags cfe2e -count 1 -timeout 20m ./test/e2e/...
+
+  clean:
+    desc: "Clean build artifacts and test cache"
+    dir: "{{.TASKFILE_DIR}}"
+    cmds:
+      - go clean -testcache
+      - rm -rf dist/ coverage.out coverage.html

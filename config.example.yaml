@@ -1,0 +1,62 @@
+---
+# polylane-k8s configuration reference.
+#
+# Precedence: flags > environment > this file > built-in defaults.
+# Validate a file with:  polylane-k8s config validate <file>
+#
+# Secrets NEVER appear in this file: keys ending in _env name an
+# environment variable to read at use time, so config files stay
+# committable.
+#
+# In-cluster, the Helm chart renders this file from .Values.config —
+# hand-editing is for local development (e.g. against fakeplatform).
+
+# Base URL of the Polylane API the agent registers against. The agent
+# talks to it only on first boot and after a credentials rejection —
+# never in steady state.
+platform_url: https://api.polylane.com
+
+# NAME of the environment variable holding the Polylane API key
+# (scoped cloud_accounts:write). Never the key itself.
+api_key_env: POLYLANE_API_KEY
+
+# Human-readable cluster name shown in the console. Empty means the
+# platform names the cluster cluster-<uid[:8]>.
+cluster_name: ""
+
+# Optional cluster flavor: eks | gke | aks | ...
+distribution: ""
+
+shim:
+  # Listen address of the read-only kube proxy. The shim is only ever
+  # reached through the Cloudflare Tunnel; validation refuses anything
+  # that does not resolve to a loopback IP.
+  listen: 127.0.0.1:8080
+
+ops:
+  # The pod's ONLY cluster-facing surface: health probes and Prometheus
+  # metrics.
+  health_listen: :8081
+  metrics_listen: :9090
+
+tunnel:
+  # cloudflared's metrics endpoint; the agent polls {metrics_url}/ready
+  # to watch tunnel health cross-container.
+  metrics_url: http://127.0.0.1:2000
+
+state_secret:
+  # Name of the pre-created Secret (in the agent's own namespace) that
+  # persists registration state, so warm restarts make zero platform
+  # calls. Required — the chart sets it.
+  name: polylane-k8s-state
+
+kube:
+  # Projected ServiceAccount credential paths. The defaults are the
+  # in-cluster standard; override only for local development and tests.
+  token_path: /var/run/secrets/kubernetes.io/serviceaccount/token
+  ca_path: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+  namespace_path: /var/run/secrets/kubernetes.io/serviceaccount/namespace
+
+log:
+  level: info # debug | info | warn | error
+  format: json # json | text

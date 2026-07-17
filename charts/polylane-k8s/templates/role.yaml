@@ -1,0 +1,17 @@
+{{- if .Values.rbac.create }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "polylane-k8s.fullname" . }}-state
+  labels:
+    {{- include "polylane-k8s.labels" . | nindent 4 }}
+rules:
+  # The agent's ONLY write grant, pinned to the one state Secret by
+  # resourceNames. get/update/patch — never create: the chart pre-creates
+  # the Secret, so a compromised agent cannot mint new ones.
+  - apiGroups: [""]
+    resources: [secrets]
+    resourceNames: [{{ include "polylane-k8s.stateSecretName" . }}]
+    verbs: [get, update, patch]
+{{- end }}

@@ -1,0 +1,16 @@
+apiVersion: v2
+name: polylane-k8s
+description: >-
+  Polylane's in-cluster Kubernetes agent: a read-only kube-API shim behind
+  an outbound-only Cloudflare Tunnel. No inbound exposure, no exec, no
+  watch, and the RBAC can never read a Secret.
+type: application
+version: 0.1.0
+# The annotation keeps appVersion moving with releases (the GenericYaml
+# updater only bumps `version`); image.tag defaults to appVersion.
+appVersion: 0.1.0 # x-release-please-version
+# Native sidecars (initContainer restartPolicy: Always) are GA in 1.29.
+kubeVersion: ">=1.29.0-0"
+home: https://github.com/coreplanelabs/polylane-k8s
+sources:
+  - https://github.com/coreplanelabs/polylane-k8s

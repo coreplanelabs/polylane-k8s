@@ -1,0 +1,51 @@
+# GoReleaser builds the release binaries. Division of labor with the rest
+# of the release automation: release-please cuts the tag, the GitHub
+# release, and the notes; the containers workflow builds multi-arch
+# images; the release workflow publishes the Helm chart. GoReleaser only
+# attaches cross-platform binary archives and checksums to the release
+# release-please already created.
+#
+# yamlfmt: ignore
+---
+version: 2
+
+builds:
+  - id: polylane-k8s
+    main: ./cmd/polylane-k8s
+    binary: polylane-k8s
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X github.com/coreplanelabs/polylane-k8s/internal/buildinfo.Version={{.Version}}
+      - -X github.com/coreplanelabs/polylane-k8s/internal/buildinfo.Commit={{.ShortCommit}}
+      - -X github.com/coreplanelabs/polylane-k8s/internal/buildinfo.BuildTime={{.CommitDate}}
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+archives:
+  - id: polylane-k8s
+    formats: [tar.gz]
+    name_template: "polylane-k8s_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    # No LICENSE file yet: the license choice is an open business
+    # question — add it here the moment one lands.
+    files:
+      - README.md
+      - config.example.yaml
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  # release-please owns the release notes.
+  disable: true
+
+release:
+  # Attach artifacts to the release release-please created; never touch
+  # its notes.
+  mode: keep-existing

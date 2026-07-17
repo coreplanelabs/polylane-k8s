@@ -1,0 +1,75 @@
+---
+version: "2"
+
+linters:
+  default: none
+  enable:
+    - errcheck
+    - govet
+    - staticcheck
+    - ineffassign
+    - unused
+    - bodyclose
+    - nilerr
+    - reassign
+    - durationcheck
+    - copyloopvar
+    - intrange
+    - gosec
+    - gocritic
+
+  settings:
+    errcheck:
+      check-type-assertions: true
+      check-blank: false
+      exclude-functions:
+        - io.Copy
+        - (io.Closer).Close
+        - (net/http.ResponseWriter).Write
+        - fmt.Fprint
+        - fmt.Fprintf
+        - fmt.Fprintln
+
+    govet:
+      enable-all: true
+      disable:
+        - fieldalignment
+        - shadow
+
+    staticcheck:
+      checks:
+        - "all"
+        - "-ST1000"
+        - "-ST1003"
+        - "-ST1016"
+        - "-ST1020"
+        - "-ST1021"
+        - "-ST1022"
+
+    gosec:
+      excludes:
+        - G104
+        # Token/CA/config paths are operator-supplied by design (projected
+        # ServiceAccount volumes); there is no untrusted path input.
+        - G304
+        - G115
+        - G306
+
+    gocritic:
+      disabled-checks:
+        - ifElseChain
+        - singleCaseSwitch
+
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+
+formatters:
+  enable:
+    - gofmt
+
+output:
+  sort-results: true
+  sort-order:
+    - file

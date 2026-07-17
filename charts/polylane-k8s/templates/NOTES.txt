@@ -1,0 +1,21 @@
+polylane-k8s is deploying.
+
+What happens next:
+
+  1. The agent registers this cluster with the Polylane platform and
+     persists its credentials into the state Secret
+     ({{ include "polylane-k8s.stateSecretName" . }}).
+  2. cloudflared starts once registration lands and brings the tunnel up
+     (outbound-only; nothing in this chart is exposed to the network).
+  3. The cluster shows Live in the Polylane console.
+
+Check on it:
+
+  kubectl --namespace {{ .Release.Namespace }} rollout status deployment/{{ include "polylane-k8s.fullname" . }}
+  kubectl --namespace {{ .Release.Namespace }} logs deployment/{{ include "polylane-k8s.fullname" . }} --container agent --follow
+
+If the rollout stalls, the agent logs say why: a rejected API key is a
+terminal error; network trouble retries forever with backoff.
+
+The chart's `config` value is the agent's config.yaml, verbatim — the
+chart only injects state_secret.name and the listener defaults.
