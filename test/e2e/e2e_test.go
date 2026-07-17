@@ -39,7 +39,11 @@ func canI(t *testing.T, verb, resource string, extra ...string) bool {
 		"-n", namespace}
 	args = append(args, extra...)
 	out, err := kubectlErr(t, kctx, args...)
-	switch strings.TrimSpace(strings.Split(out, "\n")[0]) {
+	// The yes/no verdict is the LAST line: cluster-scoped resources
+	// queried with -n prepend "Warning: resource ... is not namespace
+	// scoped" above it.
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	switch strings.TrimSpace(lines[len(lines)-1]) {
 	case "yes":
 		return true
 	case "no":
