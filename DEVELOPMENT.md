@@ -92,9 +92,11 @@ op that rotates BOTH the tunnel secret and the shim secret. With the
    - the release workflow pushes the chart to
      `oci://ghcr.io/coreplanelabs/charts`.
 
-The release workflow authenticates release-please with the org bot app
-(`COREPLANE_BOT_CLIENT_ID` / `COREPLANE_BOT_PRIVATE_SIGNING_KEY` org
-secrets) — provision those before the first release.
+The release workflow authenticates release-please with the org bot app,
+whose credentials are loaded from 1Password at runtime
+(`op://CI/coreplane-bot/client-id` and `.../private-key`) via
+`1password/load-secrets-action`. The only GitHub secret needed is
+`OP_SERVICE_ACCOUNT_TOKEN` — provision it before the first release.
 
 ## Renovate posture
 
