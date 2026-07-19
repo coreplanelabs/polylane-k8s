@@ -6,7 +6,8 @@
 # so this file only describes the work. Hermit pins the toolchain exactly
 # as it does locally and in GitHub Actions (via cashapp/activate-hermit),
 # so the hosted agent needs nothing preinstalled but Docker (for the kind
-# e2e) and Git.
+# e2e) and Git. Each step uses a dedicated hosted-agent cache volume for
+# Hermit, Go, golangci-lint, and Docker build caches.
 ---
 env:
   CI: "true"
@@ -14,11 +15,12 @@ env:
 steps:
   - label: ":white_check_mark: do"
     key: do
-    command:
-      - source bin/activate-hermit
-      - task do
-      - task test:full
-      - git diff --exit-code
+    command: .buildkite/steps/do.sh
+    cache:
+      name: "polylane-do-cache"
+      size: "40g"
+      paths:
+        - ".cache"
     agents:
       queue: linux-large
 
@@ -30,9 +32,11 @@ steps:
     # e2e harness runs) never reaches the local image store and `kind load
     # docker-image` can't find it. Selecting the `default` (docker-driver)
     # builder makes builds load into the daemon like they do locally.
-    command:
-      - source bin/activate-hermit
-      - docker buildx use default
-      - task e2e
+    command: .buildkite/steps/e2e.sh
+    cache:
+      name: "polylane-e2e-cache"
+      size: "40g"
+      paths:
+        - ".cache"
     agents:
       queue: linux-large
