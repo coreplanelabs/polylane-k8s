@@ -1,0 +1,14 @@
+# Buildkite port of .github/workflows/containers.yaml.
+#
+# Builds the multi-arch agent image and, off pull requests, pushes it to
+# GHCR. GitHub Actions gated this on push-to-main, v* tags, manual runs,
+# and PRs touching containers/**, **.go, go.{mod,sum}, or the workflow;
+# in Buildkite the branch/tag/PR triggers live in the pipeline settings.
+# All logic lives in .buildkite/steps/containers.sh so the shell is not
+# subject to Buildkite's pipeline-upload variable interpolation.
+---
+steps:
+  - label: ":docker: build image"
+    command: .buildkite/steps/containers.sh
+    agents:
+      queue: linux-large
