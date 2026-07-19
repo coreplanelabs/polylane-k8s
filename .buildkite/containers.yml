@@ -4,11 +4,18 @@
 # GHCR. GitHub Actions gated this on push-to-main, v* tags, manual runs,
 # and PRs touching containers/**, **.go, go.{mod,sum}, or the workflow;
 # in Buildkite the branch/tag/PR triggers live in the pipeline settings.
+# Credentials come from 1Password via the Buildkite secrets plugin; the
+# only Buildkite secret is OP_SERVICE_ACCOUNT_TOKEN, and the coreplane-bot
+# GitHub App token handles GHCR authentication.
 # All logic lives in .buildkite/steps/containers.sh so the shell is not
 # subject to Buildkite's pipeline-upload variable interpolation.
 ---
 steps:
   - label: ":docker: build image"
     command: .buildkite/steps/containers.sh
+    plugins:
+      - secrets#v2.4.0:
+          variables:
+            OP_SERVICE_ACCOUNT_TOKEN: OP_SERVICE_ACCOUNT_TOKEN
     agents:
       queue: linux-large

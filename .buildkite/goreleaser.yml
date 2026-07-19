@@ -1,11 +1,18 @@
 # Buildkite port of .github/workflows/goreleaser.yaml.
 #
-# The v* tag trigger lives in the Buildkite pipeline settings. GITHUB_TOKEN
-# needs contents:write; .goreleaser.yaml uses mode:keep-existing, so the
-# GitHub release must already exist (release-please creates it).
+# The v* tag trigger lives in the Buildkite pipeline settings. Credentials
+# come from 1Password via the Buildkite secrets plugin; the only Buildkite
+# secret is OP_SERVICE_ACCOUNT_TOKEN, and the coreplane-bot GitHub App token
+# needs contents:write. .goreleaser.yaml uses
+# mode:keep-existing, so the GitHub release must already exist
+# (release-please creates it).
 ---
 steps:
   - label: ":package: release binaries"
     command: .buildkite/steps/goreleaser.sh
+    plugins:
+      - secrets#v2.4.0:
+          variables:
+            OP_SERVICE_ACCOUNT_TOKEN: OP_SERVICE_ACCOUNT_TOKEN
     agents:
       queue: linux-large

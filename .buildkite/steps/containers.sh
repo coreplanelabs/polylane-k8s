@@ -8,8 +8,8 @@
 #     docker/metadata-action.
 #   - Layer caching uses the Namespace hosted-agent containerd cache
 #     (automatic) instead of GitHub Actions' type=gha cache.
-#   - The push credential is a Buildkite secret (GHCR_TOKEN) rather than
-#     the Actions-provided GITHUB_TOKEN.
+#   - The push credential is a GitHub App token minted from 1Password via
+#     the Buildkite secrets plugin.
 set -euo pipefail
 
 IMAGE="ghcr.io/coreplanelabs/polylane-k8s"
@@ -66,8 +66,9 @@ if [ "$is_pr" = true ]; then
   echo "--- Pull request: building both arches for validation, not pushing"
 else
   echo "--- Logging in to GHCR"
-  GHCR_TOKEN="$(buildkite-agent secret get GHCR_TOKEN)"
-  printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u coreplanelabs --password-stdin
+  source bin/activate-hermit
+  source .buildkite/steps/lib/gh-app-token.sh
+  printf '%s' "$GITHUB_TOKEN" | docker login ghcr.io -u coreplanelabs --password-stdin
   output=("--push")
 fi
 
