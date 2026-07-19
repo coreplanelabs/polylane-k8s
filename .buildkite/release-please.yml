@@ -1,0 +1,12 @@
+# Buildkite port of .github/workflows/release.yaml.
+#
+# The push-to-main trigger lives in the Buildkite pipeline settings.
+# The step requires Buildkite secrets COREPLANE_BOT_CLIENT_ID,
+# COREPLANE_BOT_PRIVATE_SIGNING_KEY, and GHCR_TOKEN. This path is not yet
+# verifiable without those secrets.
+---
+steps:
+  - label: ":rocket: release-please"
+    command: .buildkite/steps/release-please.sh
+    agents:
+      queue: linux-large

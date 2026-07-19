@@ -1,0 +1,11 @@
+# Buildkite port of .github/workflows/goreleaser.yaml.
+#
+# The v* tag trigger lives in the Buildkite pipeline settings. GITHUB_TOKEN
+# needs contents:write; .goreleaser.yaml uses mode:keep-existing, so the
+# GitHub release must already exist (release-please creates it).
+---
+steps:
+  - label: ":package: release binaries"
+    command: .buildkite/steps/goreleaser.sh
+    agents:
+      queue: linux-large
