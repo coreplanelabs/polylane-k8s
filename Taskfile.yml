@@ -74,9 +74,19 @@ tasks:
       - "go.sum"
       - ".golangci.yml"
       - "charts/**/*"
+      - ".github/**/*"
     cmds:
       - golangci-lint run ./...
       - task: lint:chart
+      - task: lint:workflows
+
+  lint:workflows:
+    desc: "Audit GitHub Actions workflows for security issues (zizmor)"
+    dir: "{{.TASKFILE_DIR}}"
+    cmds:
+      # Offline audits only; config (incl. accepted findings) lives in
+      # .github/zizmor.yml, which zizmor discovers on its own.
+      - zizmor --no-progress .github/workflows
 
   lint:chart:
     desc: "Lint and schema-validate the Helm chart"

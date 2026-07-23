@@ -38,6 +38,11 @@ jobs:
           client-id: ${{ env.COREPLANE_CLIENT_ID }}
           private-key: ${{ env.COREPLANE_PRIVATE_SIGNING_KEY }}
           owner: ${{ github.repository_owner }}
+          # Scope the minted token to this repo and to exactly what
+          # release-please needs — never the app installation's full grant.
+          repositories: polylane-k8s
+          permission-contents: write
+          permission-pull-requests: write
 
       - name: Create or update release PR
         id: release
@@ -56,11 +61,14 @@ jobs:
     permissions:
       contents: read
       packages: write
+      # OIDC identity for cosign keyless signing.
+      id-token: write
     steps:
       - name: Checkout release tag
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
           ref: ${{ needs.release-please.outputs.tag_name }}
+          persist-credentials: false
 
       - name: Activate Hermit
         uses: cashapp/activate-hermit@cea9af7913204a965fd488637a8d1811bba2e616 # v1
@@ -68,12 +76,20 @@ jobs:
           cache: "true"
 
       - name: Log in to GHCR for Helm
-        run: |
-          echo "${{ secrets.GITHUB_TOKEN }}" | \
-            helm registry login ghcr.io --username "${{ github.repository_owner }}" --password-stdin
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OWNER: ${{ github.repository_owner }}
+        run: printf '%s' "$GHCR_TOKEN" | helm registry login ghcr.io --username "$OWNER" --password-stdin
 
-      - name: Package and push chart
+      - name: Package, push, and sign chart
+        env:
+          VERSION: ${{ needs.release-please.outputs.version }}
+          OWNER: ${{ github.repository_owner }}
+        # Sign the digest helm push reports: like the image, the signature
+        # binds to the manifest, not to a movable tag.
         run: |-
           helm package charts/polylane-k8s --destination dist/
-          helm push "dist/polylane-k8s-${{ needs.release-please.outputs.version }}.tgz" \
-            "oci://ghcr.io/${{ github.repository_owner }}/charts"
+          helm push "dist/polylane-k8s-${VERSION}.tgz" "oci://ghcr.io/${OWNER}/charts" 2>&1 | tee push.log
+          digest="$(sed -n 's/^Digest: //p' push.log)"
+          test -n "$digest"
+          cosign sign --yes "ghcr.io/${OWNER}/charts/polylane-k8s@${digest}"

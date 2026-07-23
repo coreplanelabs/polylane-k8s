@@ -32,14 +32,30 @@ archives:
   - id: polylane-k8s
     formats: [tar.gz]
     name_template: "polylane-k8s_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
-    # No LICENSE file yet: the license choice is an open business
-    # question — add it here the moment one lands.
     files:
+      - LICENSE
       - README.md
       - config.example.yaml
 
 checksum:
   name_template: checksums.txt
+
+# Keyless cosign signature over checksums.txt: one blob signature covers
+# every archive (each is pinned by its checksum). cosign is hermit-pinned;
+# the workflow grants id-token:write for the OIDC identity.
+signs:
+  - cmd: cosign
+    signature: "${artifact}.sig"
+    certificate: "${artifact}.pem"
+    args:
+      - sign-blob
+      - --yes
+      - --output-signature
+      - ${signature}
+      - --output-certificate
+      - ${certificate}
+      - ${artifact}
+    artifacts: checksum
 
 changelog:
   # release-please owns the release notes.

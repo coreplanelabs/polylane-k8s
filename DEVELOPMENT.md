@@ -20,8 +20,9 @@ same versions via `cashapp/activate-hermit`.
 | `task do` | All quality checks: generate, format, lint, test, build |
 | `task init` | Download Go module dependencies |
 | `task format` (`f`) | `go fmt` + yamlfmt (charts/ excluded) |
-| `task lint` (`l`) | golangci-lint + chart lint/schema validation |
+| `task lint` (`l`) | golangci-lint + chart lint/schema validation + workflow audit |
 | `task lint:chart` | `helm lint` + kubeconform over three value permutations |
+| `task lint:workflows` | zizmor security audit of `.github/workflows` |
 | `task test` (`t`) | Go tests |
 | `task test:full` | Tests with `-race -cover` (what CI runs) |
 | `task test:chart` | Chart render tests (`./test/chart/...`) |
@@ -86,11 +87,15 @@ op that rotates BOTH the tunnel secret and the shim secret. With the
    (`internal/buildinfo/buildinfo.go`, `charts/polylane-k8s/Chart.yaml`)
    and the changelog.
 3. Merging that PR creates the `vX.Y.Z` tag and GitHub release; then:
-   - the goreleaser workflow attaches binary archives + checksums,
+   - the goreleaser workflow attaches binary archives + checksums and a
+     keyless cosign signature over `checksums.txt`,
    - the containers workflow publishes multi-arch images to
-     `ghcr.io/coreplanelabs/polylane-k8s`,
+     `ghcr.io/coreplanelabs/polylane-k8s`, cosign-signed by digest,
    - the release workflow pushes the chart to
-     `oci://ghcr.io/coreplanelabs/charts`.
+     `oci://ghcr.io/coreplanelabs/charts` and cosign-signs its digest.
+
+Verification commands for all three live in the README ("Verifying
+release artifacts").
 
 The release workflow authenticates release-please with the org bot app,
 whose credentials are loaded from 1Password at runtime
