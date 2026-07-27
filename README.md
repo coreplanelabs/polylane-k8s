@@ -1,99 +1,66 @@
 # polylane-k8s
 
-A deliberately minimal, read-only in-cluster agent that connects a
-Kubernetes cluster to the Polylane platform over an outbound-only
-Cloudflare Tunnel. No inbound ports, no LoadBalancer, no Ingress — and
-no cluster credentials ever leave the cluster.
+The in-cluster agent that connects a Kubernetes cluster to the
+Polylane platform. It is read-only and reaches the platform through an
+outbound-only Cloudflare Tunnel.
 
-## How it works
+## Requirements
 
-One pod, two containers:
-
-- **agent** (this repo, a native sidecar): registers the cluster and
-  serves a loopback-only, GET-only proxy (the "shim") in front of the
-  kube API.
-- **cloudflared** (the official Cloudflare image, unmodified): runs the
-  tunnel that is the shim's only path to the outside world.
-
-On first boot the agent makes one bootstrap call to the platform:
-`POST /v1/cloud_accounts/kubernetes/agent/register` with the cluster's
-identity (the `kube-system` namespace UID). The platform provisions a
-tunnel and returns a tunnel token, hostname, and a shim secret. The
-agent persists all of it into a pre-created state Secret; cloudflared
-reads the tunnel token from that Secret's volume and connects out.
-
-Warm restarts load the state Secret and make **zero** platform calls.
-Steady state involves no polling and no control channel beyond the
-tunnel itself.
-
-## Security model
-
-- **Read-only shim**: loopback-only listener, GET-only, with an ordered
-  9-rule policy — per-request shared-secret auth, method allowlist,
-  strict path validation (only `/version`, `/api...`, `/apis...`),
-  subresource denylist (`exec`, `attach`, `portforward`, `proxy`, ...),
-  `secrets` paths denied outright, `watch`/`follow` rejected,
-  connection upgrades rejected, request bodies never forwarded.
-- **RBAC**: the ClusterRole grants `get`/`list` only, over an
-  enumerated resource list — `secrets` is deliberately absent. The only
-  Secret access is a namespaced Role scoped by `resourceNames` to the
-  agent's own state Secret.
-- **Exposure**: the shim listens on 127.0.0.1 by construction (the
-  agent refuses anything else) and is reachable only through the
-  Cloudflare Tunnel. The pod's cluster-facing surface is health probes
-  and Prometheus metrics.
-- **Credentials**: the ServiceAccount token stays in the cluster; the
-  platform authenticates to the shim with a rotatable shim secret, and
-  the shim attaches the token upstream per request.
+- Kubernetes >= 1.29
+- Helm >= 3.8
+- A Polylane API key scoped `cloud_accounts:write`
+- Outbound egress from the pod: HTTPS to the Polylane API
+  (`api.polylane.com` by default) and cloudflared's connection to
+  Cloudflare's edge (see Cloudflare's "Tunnel with firewall"
+  documentation for ports and IP ranges). The chart's `proxy.*` values
+  apply to the agent's platform calls only; cloudflared does not use
+  them.
 
 ## Install
 
+Create a namespace and an API key Secret, then install the chart:
+
 ```sh
-helm install polylane oci://ghcr.io/coreplanelabs/charts/polylane-k8s \
-  --namespace polylane --create-namespace \
+kubectl create namespace polylane
+kubectl --namespace polylane create secret generic polylane-api-key \
+  --from-literal=api-key=<your Polylane API key>
+
+helm install polylane-k8s oci://ghcr.io/coreplanelabs/charts/polylane-k8s \
+  --namespace polylane \
   --set apiKey.existingSecret=polylane-api-key \
   --set config.cluster_name=prod-us-east
 ```
 
-`apiKey.existingSecret` names a Secret holding the Polylane API key
-under the key `api-key` (configurable via `apiKey.secretKey`). For
-quick trials, `--set polylane.apiKey=...` templates the Secret for you
-— exactly one of the two must be set.
+The Secret holds the API key under the key `api-key` (configurable via
+`apiKey.secretKey`); `config.cluster_name` is the name shown in the
+Polylane console. Once the pod is Ready, the cluster shows as Live in
+the console.
 
-## Requirements
-
-- Kubernetes >= 1.29 (native sidecar containers)
-- Outbound HTTPS from the pod to the Polylane API and Cloudflare's edge
-  (proxy and custom-CA settings are available in the chart values)
+Upgrade with `helm upgrade` at any time. To remove the agent, run
+`helm uninstall polylane-k8s --namespace polylane`, then disconnect the
+cluster in the console.
 
 ## Configuration
 
-- `config.example.yaml` — the full commented reference for the agent's
-  config file. Validate with `polylane-k8s config validate`.
-- `charts/polylane-k8s/values.yaml` — chart values; `config` is
-  rendered verbatim as the agent's config file.
+| Value | What it does |
+|---|---|
+| `config.cluster_name` | Display name in the Polylane console |
+| `config.distribution` | Optional cluster flavor: `eks`, `gke`, `aks`, ... |
+| `proxy.httpsProxy`, `proxy.noProxy` | Corporate egress proxy for the agent's platform calls |
+| `customCA.existingSecret`, `customCA.key` | Extra CA bundle for TLS-intercepting middleboxes |
+| `metrics.service.enabled`, `metrics.serviceMonitor.enabled` | Prometheus scraping |
+| `networkPolicy.enabled` | Restrict pod ingress to probes and metrics |
+| `resources`, `tunnel.resources` | Container resources |
 
-## Development
+Full references: `charts/polylane-k8s/values.yaml` for the chart,
+`config.example.yaml` for the agent's config file.
 
-```sh
-. bin/activate-hermit
-task do
-```
+## Verifying release artifacts
 
-See `DEVELOPMENT.md` for the task targets, e2e instructions, and the
-release flow.
-
-## Releases
-
-release-please cuts the tag and notes from conventional commits;
-GoReleaser attaches binary archives; CI publishes multi-arch images to
-`ghcr.io/coreplanelabs/polylane-k8s` and the chart to
-`oci://ghcr.io/coreplanelabs/charts`.
-
-### Verifying release artifacts
-
-Everything CI publishes is signed with [cosign](https://docs.sigstore.dev)
-keyless signatures tied to this repository's GitHub Actions identity.
+Images (`ghcr.io/coreplanelabs/polylane-k8s`), the Helm chart
+(`oci://ghcr.io/coreplanelabs/charts/polylane-k8s`), and the release
+binaries are signed with [cosign](https://docs.sigstore.dev) keyless
+signatures tied to this repository's GitHub Actions identity.
 
 ```sh
 # Container image (any tag; the signature binds to the digest)
@@ -113,6 +80,18 @@ cosign verify-blob checksums.txt \
   --certificate-identity-regexp '^https://github.com/coreplanelabs/polylane-k8s/\.github/workflows/goreleaser\.yaml@' \
   && sha256sum --check --ignore-missing checksums.txt
 ```
+
+## Security
+
+The agent's RBAC grants `get`/`list` over an enumerated resource list,
+with no access to Secrets. The full security model is documented in
+[DEVELOPMENT.md](DEVELOPMENT.md); report vulnerabilities per
+[SECURITY.md](SECURITY.md).
+
+## Development
+
+See [DEVELOPMENT.md](DEVELOPMENT.md) for the architecture, task
+targets, e2e instructions, and the release flow.
 
 ## License
 
