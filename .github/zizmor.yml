@@ -8,3 +8,11 @@ rules:
       # release flow to a hermit-pinned `op`, which is planned as part of
       # the deferred Buildkite migration (see closed PR #3).
       - release.yaml
+  github-env:
+    ignore:
+      # Exporting hermit's environment into GITHUB_ENV is the vendored
+      # activate-hermit action's entire purpose. The content comes from
+      # the repo's own bin/ (hermit-pinned toolchain), which anyone able
+      # to influence could equally use to edit the workflows themselves —
+      # no privilege boundary is crossed.
+      - action.yml

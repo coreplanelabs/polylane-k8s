@@ -22,7 +22,7 @@ same versions via `cashapp/activate-hermit`.
 | `task format` (`f`) | `go fmt` + yamlfmt (charts/ excluded) |
 | `task lint` (`l`) | golangci-lint + chart lint/schema validation + workflow audit |
 | `task lint:chart` | `helm lint` + kubeconform over three value permutations |
-| `task lint:workflows` | zizmor security audit of `.github/workflows` |
+| `task lint:workflows` | zizmor security audit of `.github` (workflows + vendored actions) |
 | `task test` (`t`) | Go tests |
 | `task test:full` | Tests with `-race -cover` (what CI runs) |
 | `task test:chart` | Chart render tests (`./test/chart/...`) |

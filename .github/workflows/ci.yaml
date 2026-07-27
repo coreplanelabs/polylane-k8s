@@ -26,7 +26,7 @@ jobs:
           persist-credentials: false
 
       - name: Activate Hermit
-        uses: cashapp/activate-hermit@cea9af7913204a965fd488637a8d1811bba2e616 # v1
+        uses: ./.github/actions/activate-hermit
         with:
           cache: "true"
 
@@ -50,7 +50,7 @@ jobs:
           persist-credentials: false
 
       - name: Activate Hermit
-        uses: cashapp/activate-hermit@cea9af7913204a965fd488637a8d1811bba2e616 # v1
+        uses: ./.github/actions/activate-hermit
         with:
           cache: "true"
 
