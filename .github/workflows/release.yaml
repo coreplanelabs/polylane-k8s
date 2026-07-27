@@ -75,11 +75,16 @@ jobs:
         with:
           cache: "true"
 
-      - name: Log in to GHCR for Helm
+      # helm and cosign keep separate credential stores (helm its own
+      # registry config, cosign the Docker config), so log in to both —
+      # otherwise the signing step 401s on the chart helm just pushed.
+      - name: Log in to GHCR for Helm and cosign
         env:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           OWNER: ${{ github.repository_owner }}
-        run: printf '%s' "$GHCR_TOKEN" | helm registry login ghcr.io --username "$OWNER" --password-stdin
+        run: |-
+          printf '%s' "$GHCR_TOKEN" | helm registry login ghcr.io --username "$OWNER" --password-stdin
+          printf '%s' "$GHCR_TOKEN" | cosign login ghcr.io --username "$OWNER" --password-stdin
 
       - name: Package, push, and sign chart
         env:
