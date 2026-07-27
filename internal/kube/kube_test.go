@@ -502,6 +502,28 @@ func TestRequestHeaders(t *testing.T) {
 	}
 }
 
+func TestClientDoesNotFollowRedirect(t *testing.T) {
+	t.Parallel()
+	redirected := make(chan struct{}, 1)
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		redirected <- struct{}{}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer target.Close()
+
+	tc := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, target.URL, http.StatusTemporaryRedirect)
+	}))
+	if err := tc.c.Ping(context.Background()); err == nil || !strings.Contains(err.Error(), "307") {
+		t.Fatalf("Ping error = %v, want redirect status", err)
+	}
+	select {
+	case <-redirected:
+		t.Error("kube client followed redirect away from the configured API server")
+	default:
+	}
+}
+
 func TestTransportTrustsClusterCAWithoutAuth(t *testing.T) {
 	t.Parallel()
 

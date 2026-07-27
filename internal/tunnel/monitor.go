@@ -89,8 +89,18 @@ func New(opts Options) *Monitor {
 	}
 	client := opts.HTTPClient
 	if client == nil {
-		client = &http.Client{Timeout: defaultProbeTimeout}
+		client = &http.Client{
+			Timeout: defaultProbeTimeout,
+			// This is a same-pod loopback probe. It must never consult proxy
+			// environment variables or leave the network namespace.
+			Transport: &http.Transport{},
+		}
 	}
+	clientCopy := *client
+	clientCopy.CheckRedirect = func(*http.Request, []*http.Request) error {
+		return http.ErrUseLastResponse
+	}
+	client = &clientCopy
 	return &Monitor{
 		readyURL:           strings.TrimRight(opts.MetricsURL, "/") + "/ready",
 		interval:           interval,

@@ -107,6 +107,15 @@ func New(opts Options) *Client {
 			},
 		}
 	}
+	// Never follow a platform redirect. Go forwards custom headers such as
+	// x-api-key across origins, so chasing an untrusted Location could
+	// disclose the registration credential. Clone to avoid mutating an
+	// injected client's policy for its other users.
+	httpClientCopy := *httpClient
+	httpClientCopy.CheckRedirect = func(*http.Request, []*http.Request) error {
+		return http.ErrUseLastResponse
+	}
+	httpClient = &httpClientCopy
 	logger := opts.Logger
 	if logger == nil {
 		logger = slog.Default()

@@ -98,6 +98,13 @@ func TestNewDefaults(t *testing.T) {
 	if m.client.Timeout != 3*time.Second {
 		t.Errorf("client timeout = %v, want 3s", m.client.Timeout)
 	}
+	transport, ok := m.client.Transport.(*http.Transport)
+	if !ok {
+		t.Fatalf("client transport = %T, want *http.Transport", m.client.Transport)
+	}
+	if transport.Proxy != nil {
+		t.Error("client transport consults a proxy for the loopback probe")
+	}
 	if m.readyURL != "http://127.0.0.1:2000/ready" {
 		t.Errorf("readyURL = %q, want trailing slash collapsed", m.readyURL)
 	}
@@ -338,5 +345,29 @@ func TestMonitorUnreachableEndpointIsNotReady(t *testing.T) {
 	waitFor(t, "probe against dead endpoint", func() bool { return !m.Status().LastChecked.IsZero() })
 	if m.Status().Ready {
 		t.Error("Ready = true against an unreachable endpoint")
+	}
+}
+
+func TestMonitorDoesNotFollowRedirect(t *testing.T) {
+	t.Parallel()
+	redirected := make(chan struct{}, 1)
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		redirected <- struct{}{}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer target.Close()
+	source := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, target.URL, http.StatusTemporaryRedirect)
+	}))
+	defer source.Close()
+
+	m := New(Options{MetricsURL: source.URL, HTTPClient: source.Client(), Logger: discardLogger()})
+	if m.checkReady(context.Background()) {
+		t.Error("redirect response counted as ready")
+	}
+	select {
+	case <-redirected:
+		t.Error("tunnel monitor followed redirect away from its configured endpoint")
+	default:
 	}
 }

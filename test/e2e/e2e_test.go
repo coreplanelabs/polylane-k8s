@@ -148,6 +148,7 @@ spec:
 		"--set", "tunnel.command={/fakeplatform}",
 		"--set", "tunnel.args={tunnel-stub,--listen,:2000}",
 		"--set", "config.platform_url=http://fakeplatform:8180",
+		"--set", "config.allow_insecure_platform=true",
 		"--set", "config.cluster_name=kind-e2e",
 	)
 	waitRollout(t, kctx, namespace, release)

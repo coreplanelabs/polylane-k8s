@@ -30,17 +30,33 @@ func TestValidate(t *testing.T) {
 		wantSub string // "" means valid
 	}{
 		{"valid base", func(c *Config) {}, ""},
+		{"platform path", func(c *Config) { c.PlatformURL = "https://example.com/api" }, ""},
+		{"insecure platform explicitly allowed", func(c *Config) {
+			c.PlatformURL = "http://fakeplatform:8180"
+			c.AllowInsecurePlatform = true
+		}, ""},
 		{"localhost shim listen", func(c *Config) { c.Shim.Listen = "localhost:8080" }, ""},
 		{"ipv6 loopback shim listen", func(c *Config) { c.Shim.Listen = "[::1]:8080" }, ""},
+		{"localhost tunnel metrics", func(c *Config) { c.Tunnel.MetricsURL = "http://localhost:2000" }, ""},
+		{"ipv6 tunnel metrics", func(c *Config) { c.Tunnel.MetricsURL = "http://[::1]:2000" }, ""},
 		{"missing platform url", func(c *Config) { c.PlatformURL = "" }, "platform_url is required"},
-		{"bad platform url scheme", func(c *Config) { c.PlatformURL = "ftp://x" }, "want an http(s) URL"},
+		{"bad platform url scheme", func(c *Config) { c.PlatformURL = "ftp://x" }, "want an https URL"},
+		{"insecure platform", func(c *Config) { c.PlatformURL = "http://example.com" }, "must use https"},
+		{"platform url missing host", func(c *Config) { c.PlatformURL = "https:///api" }, "host is required"},
+		{"platform url userinfo", func(c *Config) { c.PlatformURL = "https://user@example.com" }, "userinfo"},
+		{"platform url query", func(c *Config) { c.PlatformURL = "https://example.com?tenant=x" }, "query parameters"},
+		{"platform url fragment", func(c *Config) { c.PlatformURL = "https://example.com/#x" }, "fragments"},
 		{"missing api key env", func(c *Config) { c.APIKeyEnv = "" }, "api_key_env is required"},
 		{"non-loopback shim listen", func(c *Config) { c.Shim.Listen = "0.0.0.0:8080" }, "not a loopback address"},
 		{"hostname shim listen", func(c *Config) { c.Shim.Listen = "example.com:8080" }, "literal loopback IP"},
 		{"shim listen without port", func(c *Config) { c.Shim.Listen = "127.0.0.1" }, "not host:port"},
 		{"empty shim listen", func(c *Config) { c.Shim.Listen = "" }, "shim.listen"},
 		{"missing health listen", func(c *Config) { c.Ops.HealthListen = "" }, "ops.health_listen is required"},
-		{"missing tunnel metrics url", func(c *Config) { c.Tunnel.MetricsURL = "" }, "tunnel.metrics_url is required"},
+		{"missing tunnel metrics url", func(c *Config) { c.Tunnel.MetricsURL = "" }, "tunnel.metrics_url: is required"},
+		{"remote tunnel metrics", func(c *Config) { c.Tunnel.MetricsURL = "http://example.com:2000" }, "loopback"},
+		{"https tunnel metrics", func(c *Config) { c.Tunnel.MetricsURL = "https://127.0.0.1:2000" }, "want an http URL"},
+		{"tunnel metrics path", func(c *Config) { c.Tunnel.MetricsURL = "http://127.0.0.1:2000/metrics" }, "path must be empty"},
+		{"tunnel metrics query", func(c *Config) { c.Tunnel.MetricsURL = "http://127.0.0.1:2000?x=1" }, "query parameters"},
 		{"missing state secret", func(c *Config) { c.StateSecret.Name = "" }, "state_secret.name is required"},
 		{"bad log level", func(c *Config) { c.Log.Level = "verbose" }, "log.level"},
 		{"bad log format", func(c *Config) { c.Log.Format = "logfmt" }, "log.format"},
@@ -70,6 +86,9 @@ func TestDefaults(t *testing.T) {
 	cfg := Default()
 	if cfg.PlatformURL != "https://api.polylane.com" {
 		t.Errorf("PlatformURL = %q", cfg.PlatformURL)
+	}
+	if cfg.AllowInsecurePlatform {
+		t.Error("AllowInsecurePlatform = true, want secure default")
 	}
 	if cfg.APIKeyEnv != "POLYLANE_API_KEY" {
 		t.Errorf("APIKeyEnv = %q", cfg.APIKeyEnv)

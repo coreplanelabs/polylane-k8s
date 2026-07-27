@@ -23,6 +23,10 @@ type Config struct {
 	// against. The agent talks to it only on first boot and after a
 	// credentials rejection — never in steady state.
 	PlatformURL string `yaml:"platform_url"`
+	// AllowInsecurePlatform permits a cleartext platform_url. It exists only
+	// for hermetic development environments; production registration carries
+	// an API key and must use HTTPS.
+	AllowInsecurePlatform bool `yaml:"allow_insecure_platform,omitempty"`
 	// APIKeyEnv names the environment variable holding the Polylane API
 	// key (scoped cloud_accounts:write). Never the key itself.
 	APIKeyEnv string `yaml:"api_key_env"`
@@ -49,8 +53,8 @@ type Shim struct {
 	Listen string `yaml:"listen"`
 }
 
-// Ops configures the pod's cluster-facing listeners: health probes and
-// Prometheus metrics. These are the pod's ONLY cluster-facing surface.
+// Ops configures the agent's cluster-facing listeners: health probes and
+// Prometheus metrics.
 type Ops struct {
 	HealthListen  string `yaml:"health_listen"`
 	MetricsListen string `yaml:"metrics_listen"`
@@ -154,7 +158,17 @@ func (c *Config) Validate() error {
 	case err != nil:
 		errs = append(errs, fmt.Errorf("platform_url %q is invalid: %v", c.PlatformURL, err))
 	case u.Scheme != "https" && u.Scheme != "http":
-		errs = append(errs, fmt.Errorf("platform_url %q is invalid (want an http(s) URL)", c.PlatformURL))
+		errs = append(errs, fmt.Errorf("platform_url %q is invalid (want an https URL)", c.PlatformURL))
+	case u.Hostname() == "":
+		errs = append(errs, fmt.Errorf("platform_url %q is invalid (host is required)", c.PlatformURL))
+	case u.User != nil:
+		errs = append(errs, fmt.Errorf("platform_url %q is invalid (userinfo is not allowed)", c.PlatformURL))
+	case u.RawQuery != "" || u.ForceQuery:
+		errs = append(errs, fmt.Errorf("platform_url %q is invalid (query parameters are not allowed)", c.PlatformURL))
+	case u.Fragment != "":
+		errs = append(errs, fmt.Errorf("platform_url %q is invalid (fragments are not allowed)", c.PlatformURL))
+	case u.Scheme == "http" && !c.AllowInsecurePlatform:
+		errs = append(errs, errors.New("platform_url must use https (allow_insecure_platform is for development only)"))
 	}
 
 	if c.APIKeyEnv == "" {
@@ -169,8 +183,8 @@ func (c *Config) Validate() error {
 		errs = append(errs, errors.New("ops.health_listen is required (the startup probe gates the tunnel container on it)"))
 	}
 
-	if c.Tunnel.MetricsURL == "" {
-		errs = append(errs, errors.New("tunnel.metrics_url is required"))
+	if err := validateTunnelMetricsURL(c.Tunnel.MetricsURL); err != nil {
+		errs = append(errs, fmt.Errorf("tunnel.metrics_url: %w", err))
 	}
 
 	if c.StateSecret.Name == "" {
@@ -201,15 +215,49 @@ func validateLoopback(addr string) error {
 	if err != nil {
 		return fmt.Errorf("%q is not host:port: %v", addr, err)
 	}
+	return validateLoopbackHost(host)
+}
+
+func validateLoopbackHost(host string) error {
 	if host == "localhost" {
 		return nil
 	}
 	ip := net.ParseIP(host)
 	if ip == nil {
-		return fmt.Errorf("%q must use a literal loopback IP or localhost", addr)
+		return fmt.Errorf("host %q must use a literal loopback IP or localhost", host)
 	}
 	if !ip.IsLoopback() {
-		return fmt.Errorf("%q is not a loopback address; the shim must never be reachable from the cluster network", addr)
+		return fmt.Errorf("host %q is not a loopback address", host)
+	}
+	return nil
+}
+
+// validateTunnelMetricsURL keeps the cloudflared probe on the pod's loopback
+// interface. It is an internal sidecar endpoint, never a general HTTP target.
+func validateTunnelMetricsURL(raw string) error {
+	if raw == "" {
+		return errors.New("is required")
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		return fmt.Errorf("%q is invalid: %v", raw, err)
+	}
+	switch {
+	case u.Scheme != "http":
+		return fmt.Errorf("%q is invalid (want an http URL)", raw)
+	case u.Hostname() == "":
+		return fmt.Errorf("%q is invalid (host is required)", raw)
+	case u.User != nil:
+		return fmt.Errorf("%q is invalid (userinfo is not allowed)", raw)
+	case u.RawQuery != "" || u.ForceQuery:
+		return fmt.Errorf("%q is invalid (query parameters are not allowed)", raw)
+	case u.Fragment != "":
+		return fmt.Errorf("%q is invalid (fragments are not allowed)", raw)
+	case u.Path != "" && u.Path != "/":
+		return fmt.Errorf("%q is invalid (path must be empty)", raw)
+	}
+	if err := validateLoopbackHost(u.Hostname()); err != nil {
+		return err
 	}
 	return nil
 }

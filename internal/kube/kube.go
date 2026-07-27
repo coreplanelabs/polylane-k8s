@@ -133,8 +133,16 @@ func New(opts Options) (*Client, error) {
 		namespacePath: opts.NamespacePath,
 		logger:        opts.Logger,
 		transport:     transport,
-		hc:            &http.Client{Transport: transport},
-		tokenTTL:      defaultTokenTTL,
+		hc: &http.Client{
+			Transport: transport,
+			// Kubernetes API calls have fixed, fully-qualified paths. Treat a
+			// redirect as the API response instead of replaying an authenticated
+			// request to an unchecked Location.
+			CheckRedirect: func(*http.Request, []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
+		},
+		tokenTTL: defaultTokenTTL,
 	}, nil
 }
 

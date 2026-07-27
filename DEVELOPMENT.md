@@ -170,13 +170,15 @@ still running, verify the convergence contract described there.
 
 1. Merge conventional commits to `main`.
 2. release-please maintains a release PR that bumps the version
-   (`internal/buildinfo/buildinfo.go`, `charts/polylane-k8s/Chart.yaml`)
-   and the changelog.
+   (`internal/buildinfo/buildinfo.go`, both version fields in
+   `charts/polylane-k8s/Chart.yaml`, and the README install pin) and the
+   changelog.
 3. Merging that PR creates the `vX.Y.Z` tag and GitHub release; then:
    - the goreleaser workflow attaches binary archives + checksums and a
      keyless cosign signature over `checksums.txt`,
    - the containers workflow publishes multi-arch images to
-     `ghcr.io/coreplanelabs/polylane-k8s`, cosign-signed by digest,
+     `ghcr.io/coreplanelabs/polylane-k8s`, with SBOM and provenance
+     attestations and a cosign signature over the digest,
    - the release workflow pushes the chart to
      `oci://ghcr.io/coreplanelabs/charts` and cosign-signs its digest.
 

@@ -9,7 +9,20 @@
       "include-component-in-tag": false,
       "extra-files": [
         "internal/buildinfo/buildinfo.go",
-        "charts/polylane-k8s/Chart.yaml"
+        {
+          "type": "yaml",
+          "path": "charts/polylane-k8s/Chart.yaml",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "yaml",
+          "path": "charts/polylane-k8s/Chart.yaml",
+          "jsonpath": "$.appVersion"
+        },
+        {
+          "type": "generic",
+          "path": "README.md"
+        }
       ]
     }
   }

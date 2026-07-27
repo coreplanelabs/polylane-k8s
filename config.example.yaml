@@ -16,6 +16,10 @@
 # never in steady state.
 platform_url: https://api.polylane.com
 
+# Development only: permits platform_url to use cleartext HTTP for a
+# hermetic fake platform. Never enable this when using a real API key.
+allow_insecure_platform: false
+
 # NAME of the environment variable holding the Polylane API key
 # (scoped cloud_accounts:write). Never the key itself.
 api_key_env: POLYLANE_API_KEY

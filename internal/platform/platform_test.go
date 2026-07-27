@@ -253,6 +253,40 @@ func TestRegisterNetworkErrorIsTransient(t *testing.T) {
 	}
 }
 
+func TestRegisterDoesNotFollowRedirect(t *testing.T) {
+	t.Parallel()
+	redirected := make(chan struct{}, 1)
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		redirected <- struct{}{}
+		writeJSON(t, w, http.StatusOK, validResponseBody())
+	}))
+	defer target.Close()
+
+	source := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, target.URL+registerPath, http.StatusTemporaryRedirect)
+	}))
+	defer source.Close()
+
+	// source.Client follows redirects by default; New must override that
+	// policy so injected clients cannot weaken the credential boundary.
+	c := New(Options{
+		BaseURL:    source.URL,
+		APIKey:     "must-not-leak",
+		HTTPClient: source.Client(),
+		Logger:     discardLogger(),
+	})
+	_, err := c.Register(context.Background(), minimalRequest())
+	var terminal *TerminalError
+	if !errors.As(err, &terminal) || terminal.StatusCode != http.StatusTemporaryRedirect {
+		t.Fatalf("Register error = %v, want terminal 307", err)
+	}
+	select {
+	case <-redirected:
+		t.Error("registration client followed redirect and disclosed the request to its target")
+	default:
+	}
+}
+
 func TestRegisterRejectsOversizeResponse(t *testing.T) {
 	t.Parallel()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

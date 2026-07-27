@@ -10,10 +10,13 @@ package chart_test
 
 import (
 	"bytes"
+	"os"
 	"os/exec"
 	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/coreplanelabs/polylane-k8s/internal/buildinfo"
 )
 
 // releaseName yields the fullname below via the chart's fullname helper.
@@ -105,6 +108,35 @@ func TestHelmLint(t *testing.T) {
 		"--set", "apiKey.existingSecret=polylane-api-key")
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("helm lint: %v\n%s", err, out)
+	}
+}
+
+func TestReleaseVersionsStayInSync(t *testing.T) {
+	t.Parallel()
+	chart, err := os.ReadFile(chartDir + "/Chart.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	versionMatch := regexp.MustCompile(`(?m)^version:\s*['"]?([^\s'"]+)`).FindSubmatch(chart)
+	appVersionMatch := regexp.MustCompile(`(?m)^appVersion:\s*['"]?([^\s'"]+)`).FindSubmatch(chart)
+	if len(versionMatch) != 2 || len(appVersionMatch) != 2 {
+		t.Fatal("Chart.yaml must contain version and appVersion")
+	}
+	version, appVersion := string(versionMatch[1]), string(appVersionMatch[1])
+	if version != appVersion || appVersion != buildinfo.Version {
+		t.Errorf("release versions drifted: chart=%q app=%q binary=%q", version, appVersion, buildinfo.Version)
+	}
+
+	readme, err := os.ReadFile("../../README.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	docVersionMatch := regexp.MustCompile(`(?m)^POLYLANE_VERSION=([^\s#]+)`).FindSubmatch(readme)
+	if len(docVersionMatch) != 2 {
+		t.Fatal("README must pin POLYLANE_VERSION")
+	}
+	if docVersion := string(docVersionMatch[1]); docVersion != buildinfo.Version {
+		t.Errorf("documented install version = %q, binary version = %q", docVersion, buildinfo.Version)
 	}
 }
 
