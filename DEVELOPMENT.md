@@ -13,6 +13,16 @@ credentials), two containers:
 - **cloudflared** (the official image, unmodified) runs the tunnel and
   is the shim's only path to the outside world.
 
+The pod exposes no inbound service: the shim is loopback-only and
+reachable solely through the tunnel, and the only cluster-facing
+surface is the ops listener (probes and metrics). Both containers run
+non-root with read-only root filesystems, all capabilities dropped,
+and the RuntimeDefault seccomp profile; ServiceAccount token automount
+is off, with a short-lived projected token mounted explicitly. The
+ServiceAccount token itself never leaves the cluster — the shim
+attaches it upstream per request, and the platform authenticates to
+the shim with a rotatable secret.
+
 ### Registration and the state Secret
 
 On first boot the agent makes one registration call to the platform
