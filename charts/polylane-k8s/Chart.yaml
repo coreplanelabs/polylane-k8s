@@ -6,7 +6,6 @@ description: >-
   the RBAC can never read a Secret.
 type: application
 version: 0.2.1
-appVersion: 0.1.0
 kubeVersion: '>=1.29.0-0'
 home: https://github.com/coreplanelabs/polylane-k8s
 sources:

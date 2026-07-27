@@ -10,7 +10,9 @@ package chart_test
 
 import (
 	"bytes"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -33,6 +35,19 @@ func requireBinary(t *testing.T, name string) {
 	if _, err := exec.LookPath(name); err != nil {
 		t.Skipf("%s not on PATH: %v", name, err)
 	}
+}
+
+func chartVersion(t *testing.T) string {
+	t.Helper()
+	contents, err := os.ReadFile(filepath.Join(chartDir, "Chart.yaml"))
+	if err != nil {
+		t.Fatalf("read Chart.yaml: %v", err)
+	}
+	match := regexp.MustCompile(`(?m)^version:\s*['"]?([^'"\s]+)['"]?\s*$`).FindSubmatch(contents)
+	if match == nil {
+		t.Fatal("Chart.yaml has no version")
+	}
+	return string(match[1])
 }
 
 // runHelmTemplate renders the chart with the given --set pairs, returning
@@ -223,6 +238,30 @@ func TestAgentIsNativeSidecar(t *testing.T) {
 	}
 	if !strings.Contains(mainSection, "- name: cloudflared") {
 		t.Errorf("containers must hold cloudflared:\n%s", mainSection)
+	}
+}
+
+func TestAgentImage(t *testing.T) {
+	t.Parallel()
+	digest := "sha256:" + strings.Repeat("a", 64)
+	cases := []struct {
+		name string
+		sets []string
+		want string
+	}{
+		{"defaults to chart version", nil, "ghcr.io/coreplanelabs/polylane-k8s:" + chartVersion(t)},
+		{"tag override", []string{"image.tag=custom"}, "ghcr.io/coreplanelabs/polylane-k8s:custom"},
+		{"digest overrides tag", []string{"image.tag=custom", "image.digest=" + digest}, "ghcr.io/coreplanelabs/polylane-k8s@" + digest},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			sets := append([]string{"apiKey.existingSecret=polylane-api-key"}, tc.sets...)
+			initSection, _ := containerSections(t, doc(t, render(t, sets...), "Deployment"))
+			if want := `image: "` + tc.want + `"`; !strings.Contains(initSection, want) {
+				t.Errorf("agent image does not contain %q:\n%s", want, initSection)
+			}
+		})
 	}
 }
 
