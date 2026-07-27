@@ -199,4 +199,4 @@ minor/patch updates. Two deliberate choices:
   CVE fix ships days after upstream with no agent release.
 - The chart's own image (`ghcr.io/coreplanelabs/polylane-k8s`) is
   ignored by the helm-values manager: its tag is deliberately empty and
-  follows the chart's `appVersion`, which release-please owns.
+  follows the chart version, which release-please owns.

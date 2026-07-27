@@ -35,7 +35,7 @@ stateSecret:
 
 image:
   repository: ghcr.io/coreplanelabs/polylane-k8s
-  # Empty tag follows the chart's appVersion (the matching release).
+  # Empty tag follows the chart version (the matching release).
   tag: ""
   # Non-empty digest wins over tag (Renovate pins it).
   digest: ""

@@ -52,8 +52,8 @@ jobs:
           target-branch: ${{ github.ref_name }}
 
   # The Helm chart ships as an OCI artifact alongside the images.
-  # Chart.yaml's version/appVersion are bumped by release-please in the
-  # release commit itself, so packaging the tagged tree is all it takes.
+  # Chart.yaml's version is bumped by release-please in the release commit
+  # itself, so packaging the tagged tree is all it takes.
   publish-chart:
     needs: release-please
     if: ${{ needs.release-please.outputs.release_created == 'true' }}
