@@ -5,7 +5,7 @@ description: >-
   outbound-only Cloudflare Tunnel. No inbound exposure, no exec, no watch, and
   the RBAC can never read a Secret.
 type: application
-version: 0.2.1
+version: 0.2.2
 kubeVersion: '>=1.29.0-0'
 home: https://github.com/coreplanelabs/polylane-k8s
 sources:
