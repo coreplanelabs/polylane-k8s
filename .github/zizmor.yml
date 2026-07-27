@@ -1,0 +1,10 @@
+---
+# zizmor configuration — enforced in CI via `task lint:workflows`.
+rules:
+  unpinned-tools:
+    ignore:
+      # 1password/load-secrets-action (itself SHA-pinned) fetches the op
+      # CLI at its latest release. Accepted for now; the fix is moving the
+      # release flow to a hermit-pinned `op`, which is planned as part of
+      # the deferred Buildkite migration (see closed PR #3).
+      - release.yaml

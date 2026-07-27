@@ -16,19 +16,27 @@ name: containers
       - "go.sum"
       - ".github/workflows/containers.yaml"
 
+# Workflow-level grants stay read-only; the publish job elevates itself.
+# Split jobs, not conditional steps: a PR-triggered run must never HOLD a
+# write token, not merely decline to use one.
 permissions:
   contents: read
-  packages: write
 
 env:
   IMAGE: ghcr.io/${{ github.repository }}
 
 jobs:
+  # PR validation: build both arches, never push, read-only token.
   build:
+    if: ${{ github.event_name == 'pull_request' }}
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
     steps:
       - name: Checkout code
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          persist-credentials: false
 
       - name: Derive commit metadata
         id: commit
@@ -38,8 +46,67 @@ jobs:
           echo "time=$(git show -s --format=%cI HEAD)" >> "$GITHUB_OUTPUT"
           echo "short=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
 
+      - name: Extract image metadata
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=ref,event=pr
+          labels: |
+            org.opencontainers.image.title=polylane-k8s
+            org.opencontainers.image.description=Minimal read-only Kubernetes agent connecting clusters to Polylane via Cloudflare Tunnel
+
+      - name: Set up QEMU for cross-builds
+        uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8 # v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
+
+      - name: Build multi-arch image (no push)
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
+        with:
+          context: .
+          file: containers/polylane-k8s.Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: false
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            GIT_COMMIT=${{ steps.commit.outputs.short }}
+            BUILD_TIME=${{ steps.commit.outputs.time }}
+            VERSION=${{ steps.meta.outputs.version }}
+          cache-from: type=gha,scope=polylane-k8s
+          cache-to: type=gha,mode=max,scope=polylane-k8s
+
+  # Publishing: push-to-main, v* tags, and manual dispatch — never PRs.
+  publish:
+    if: ${{ github.event_name != 'pull_request' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+      # OIDC identity for cosign keyless signing.
+      id-token: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          persist-credentials: false
+
+      # Hermit supplies the pinned cosign for the signing step.
+      - name: Activate Hermit
+        uses: cashapp/activate-hermit@cea9af7913204a965fd488637a8d1811bba2e616 # v1
+        with:
+          cache: "true"
+
+      - name: Derive commit metadata
+        id: commit
+        run: |
+          echo "time=$(git show -s --format=%cI HEAD)" >> "$GITHUB_OUTPUT"
+          echo "short=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+
       - name: Log in to GitHub Container Registry
-        if: ${{ github.event_name != 'pull_request' }}
         uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4
         with:
           registry: ghcr.io
@@ -54,7 +121,6 @@ jobs:
           tags: |
             type=ref,event=branch
             type=ref,event=branch,suffix=-{{sha}}
-            type=ref,event=pr
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=raw,value=latest,enable={{is_default_branch}}
@@ -68,13 +134,14 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
 
-      - name: Build (and push, off PRs) multi-arch image
+      - name: Build and push multi-arch image
+        id: build
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
         with:
           context: .
           file: containers/polylane-k8s.Dockerfile
           platforms: linux/amd64,linux/arm64
-          push: ${{ github.event_name != 'pull_request' }}
+          push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
@@ -83,3 +150,10 @@ jobs:
             VERSION=${{ steps.meta.outputs.version }}
           cache-from: type=gha,scope=polylane-k8s
           cache-to: type=gha,mode=max,scope=polylane-k8s
+
+      # Signing the digest (not a tag) covers every tag pointing at this
+      # manifest list; verification instructions live in the README.
+      - name: Sign the pushed image (cosign keyless)
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: cosign sign --yes "${IMAGE}@${DIGEST}"

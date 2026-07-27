@@ -89,3 +89,31 @@ release-please cuts the tag and notes from conventional commits;
 GoReleaser attaches binary archives; CI publishes multi-arch images to
 `ghcr.io/coreplanelabs/polylane-k8s` and the chart to
 `oci://ghcr.io/coreplanelabs/charts`.
+
+### Verifying release artifacts
+
+Everything CI publishes is signed with [cosign](https://docs.sigstore.dev)
+keyless signatures tied to this repository's GitHub Actions identity.
+
+```sh
+# Container image (any tag; the signature binds to the digest)
+cosign verify ghcr.io/coreplanelabs/polylane-k8s:<tag> \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  --certificate-identity-regexp '^https://github.com/coreplanelabs/polylane-k8s/\.github/workflows/containers\.yaml@'
+
+# Helm chart
+cosign verify ghcr.io/coreplanelabs/charts/polylane-k8s:<version> \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  --certificate-identity-regexp '^https://github.com/coreplanelabs/polylane-k8s/\.github/workflows/release\.yaml@'
+
+# Binary archives: verify checksums.txt, then the archives against it
+cosign verify-blob checksums.txt \
+  --signature checksums.txt.sig --certificate checksums.txt.pem \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  --certificate-identity-regexp '^https://github.com/coreplanelabs/polylane-k8s/\.github/workflows/goreleaser\.yaml@' \
+  && sha256sum --check --ignore-missing checksums.txt
+```
+
+## License
+
+[MIT](LICENSE).
