@@ -1,5 +1,93 @@
 # Development
 
+## Architecture
+
+One single-replica Deployment (`strategy: Recreate` — the schema caps
+replicas at 1, so two agents can never fight over the same tunnel
+credentials), two containers:
+
+- **agent** (this repo) runs as a native sidecar (an initContainer
+  with `restartPolicy: Always`): it starts first, and its startupProbe
+  gates cloudflared so the tunnel only comes up after registration has
+  persisted credentials.
+- **cloudflared** (the official image, unmodified) runs the tunnel and
+  is the shim's only path to the outside world.
+
+### Registration and the state Secret
+
+On first boot the agent makes one registration call to the platform
+(`internal/platform`), identifying the cluster by its `kube-system`
+namespace UID. The platform provisions a Cloudflare Tunnel and returns
+the credentials the pod needs: the tunnel token and hostname, plus the
+shim secret the platform authenticates with. The agent persists all of
+it into a pre-created state Secret; cloudflared reads the tunnel token
+from that Secret's volume — a whole-dir mount, no subPath, so kubelet
+propagates updates without a pod restart — and connects out.
+
+The chart pre-creates the Secret empty because the agent's RBAC is
+`get`/`update`/`patch` pinned to that one `resourceNames` entry: it
+can never create (or read) any other Secret. See
+`internal/kube/statestore.go`.
+
+Warm restarts load the state Secret and make **zero** platform calls —
+complete persisted state is served as-is, and registration re-runs
+only when state is absent or credentials were rejected. Steady state
+involves no polling and no control channel beyond the tunnel itself.
+
+Registration failures split into a retry taxonomy
+(`internal/platform/retry.go`): transient answers (429, 5xx, network)
+retry forever with capped full-jitter backoff; terminal rejections
+(400, 401, 403, 426) exit nonzero so a bad API key surfaces as
+CrashLoopBackOff — the deliberate operator signal for "this install
+needs a human".
+
+### The shim
+
+`internal/shim` is the security boundary: a pass-through proxy in
+front of the kube API, bound only to loopback (config validation
+refuses anything else) and reached only through the tunnel. Every
+request runs an ordered, deny-first policy — auth, local health,
+method, path hygiene, allowed roots (`/version`, `/api...`,
+`/apis...`), subresource denylist (`exec`, `attach`, `portforward`,
+`proxy`, ...), `secrets` paths denied outright, query validation
+(`watch`/`follow` rejected), connection-upgrade rejection — and the
+first failing rule decides the response with a fixed status code.
+Surviving requests are re-issued upstream as fresh GETs with a nil
+body and an allowlisted header set, with the ServiceAccount token
+attached per request, so writes, exec, watches, and protocol upgrades
+cannot transit the shim by construction. The package documentation in
+`internal/shim/shim.go` is the reference.
+
+### Credential rotation
+
+When the platform rotates the tunnel and shim secrets, the old
+connector is rejected at Cloudflare's edge: cloudflared's `/ready`
+fails (typically restarting its container once). The agent watches
+that readiness endpoint (`internal/tunnel`); once it has been down for
+the failure grace (~3 minutes, jittered so a fleet never acts in
+lockstep), the agent re-registers idempotently and rewrites the state
+Secret. cloudflared picks up the propagated token and the pod
+converges without restarting: same pod, cloudflared restart count +1,
+`/readyz` back to 200 within a few minutes, the new shim secret
+working through the tunnel and the old one answering 401.
+
+Rotation is a platform-side operation, so the full loop cannot be
+driven from this repo. The pieces are unit-tested (`internal/tunnel`,
+`internal/agent`); the end-to-end recovery is observable against a
+live `task e2e:cf` cluster when a rotation occurs.
+
+### Health and failure semantics
+
+The agent's ops listener (`:8081`) serves `/startupz`, `/healthz`, and
+`/readyz`; Prometheus metrics are on `:9090`; the agent polls
+cloudflared's metrics endpoint (`:2000/ready`) to watch tunnel health
+cross-container. Liveness is process health only — it never depends on
+the tunnel or the platform, so a Cloudflare or Polylane outage
+surfaces as NotReady, never as a crash loop. The startup probe budget
+is deliberately long (1 hour) so cold-boot registration can ride out a
+platform outage in backoff without the kubelet faking the
+CrashLoopBackOff signal reserved for rejected credentials.
+
 ## Toolchain
 
 Everything is pinned with [Hermit](https://cashapp.github.io/hermit/) —
@@ -54,31 +142,19 @@ registration and proxies through Cloudflare's edge:
 
 ```sh
 export POLYLANE_E2E_API_KEY=...       # key scoped cloud_accounts:write
-export POLYLANE_E2E_PLATFORM_URL=...  # e.g. a staging platform
+export POLYLANE_E2E_PLATFORM_URL=...  # platform base URL
 task e2e:cf
 ```
 
-This creates real tunnels in the associated Cloudflare account; use a
-staging platform account, never a customer one.
+This creates real tunnels in the associated Cloudflare account and a
+real cloud account in the target workspace. Point it at a Polylane
+workspace set aside for testing — never a customer one — and
+disconnect the test cluster in the console afterwards.
 
-### Rotation-loop validation (manual, needs a platform operator)
-
-The credential-rotation loop (COR-32 §1: platform rotates → edge rejects
-the connector → cloudflared restarts → agent re-registers → converges)
-cannot be driven from this repo alone: rotation is an explicit platform
-op that rotates BOTH the tunnel secret and the shim secret. With the
-`task e2e:cf` cluster still running:
-
-1. Have a platform operator trigger the rotate op for the test account
-   (`rotateTunnelSecret` + shim secret, the §4.2 composite).
-2. Watch the pod: cloudflared's `/ready` goes 503 and it restarts;
-   within the agent's ~3 min grace it re-registers (idempotently) and
-   rewrites the state Secret.
-3. Assert convergence, no pod restart:
-   `kubectl -n polylane-cf-e2e get pod` (same pod, cloudflared restart
-   count +1) and the agent's `/readyz` back to 200 within ~1–3 min.
-4. Confirm the new shim secret works through the tunnel and the old one
-   answers 401.
+The credential-rotation loop (see "Credential rotation" above) is the
+one behavior this suite cannot drive, since rotation happens platform
+side. If a rotation is triggered while the `task e2e:cf` cluster is
+still running, verify the convergence contract described there.
 
 ## Release flow
 
@@ -97,11 +173,11 @@ op that rotates BOTH the tunnel secret and the shim secret. With the
 Verification commands for all three live in the README ("Verifying
 release artifacts").
 
-The release workflow authenticates release-please with the org bot app,
-whose credentials are loaded from 1Password at runtime
-(`op://CI/coreplane-bot/client-id` and `.../private-key`) via
-`1password/load-secrets-action`. The only GitHub secret needed is
-`OP_SERVICE_ACCOUNT_TOKEN` — provision it before the first release.
+The release workflow authenticates release-please with the org's
+release bot (a GitHub App) whose credentials are loaded from 1Password
+at runtime via `1password/load-secrets-action`. The only GitHub secret
+needed is `OP_SERVICE_ACCOUNT_TOKEN` — provision it before the first
+release.
 
 ## Renovate posture
 

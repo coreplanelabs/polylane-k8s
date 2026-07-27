@@ -10,10 +10,10 @@
 //
 // Deliberately manual: it creates real tunnel/DNS state in the Coreplane
 // Cloudflare account and a real cloud account in the target workspace.
-// Clean up with a console disconnect afterwards. Rotation-loop validation
-// requires a platform operator to trigger the rotate op — follow
-// "Rotation-loop validation" in DEVELOPMENT.md while this suite's
-// cluster is still running.
+// Clean up with a console disconnect afterwards. Credential-rotation
+// recovery cannot be driven from here (rotation happens platform-side);
+// if one occurs while this suite's cluster is still running, verify the
+// convergence contract under "Credential rotation" in DEVELOPMENT.md.
 package e2e
 
 import (

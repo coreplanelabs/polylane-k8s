@@ -165,7 +165,7 @@ tasks:
         echo
         echo "Prerequisites (the test fails fast without them):"
         echo "  POLYLANE_E2E_API_KEY       API key scoped cloud_accounts:write"
-        echo "  POLYLANE_E2E_PLATFORM_URL  platform base URL (e.g. a staging env)"
+        echo "  POLYLANE_E2E_PLATFORM_URL  platform base URL (a workspace set aside for testing)"
         echo
       - go test -tags cfe2e -count 1 -timeout 20m ./test/e2e/...
 
