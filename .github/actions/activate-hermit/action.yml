@@ -31,7 +31,7 @@ runs:
         hash="$(find "./${WORKING_DIRECTORY}/bin" ! -type d | sort | xargs openssl sha256 | openssl sha256 -r | cut -d' ' -f1)"
         echo "hash=$hash" >> "$GITHUB_OUTPUT"
     - if: ${{ inputs.cache == 'true' }}
-      uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ${{ runner.os == 'macOS' && '~/Library/Caches/hermit/pkg' || '~/.cache/hermit/pkg' }}
         key: ${{ runner.os }}-${{ runner.arch}}-hermit-cache-${{ steps.bin-hash.outputs.hash }}
