@@ -103,7 +103,8 @@ func (m *Metrics) RecordRequest(outcome string, d time.Duration) {
 }
 
 // IncRegistration counts a registration attempt by result
-// (success|terminal|transient_error).
+// (success|terminal). Transient failures are retried inside
+// RegisterWithRetry and never surface here as their own result.
 func (m *Metrics) IncRegistration(result string) {
 	m.registrations.WithLabelValues(result).Inc()
 }
