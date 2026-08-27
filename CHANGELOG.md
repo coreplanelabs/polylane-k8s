@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.3](https://github.com/coreplanelabs/polylane-k8s/compare/v0.2.2...v0.2.3) (2026-08-27)
+
+
+### Bug Fixes
+
+* **deps:** update module github.com/alecthomas/kong to v1.16.1 ([#44](https://github.com/coreplanelabs/polylane-k8s/issues/44)) ([4997809](https://github.com/coreplanelabs/polylane-k8s/commit/49978090468ef75767744cdb2fda076678554999))
+* **deps:** update module github.com/prometheus/client_golang to v1.24.1 ([#45](https://github.com/coreplanelabs/polylane-k8s/issues/45)) ([2053028](https://github.com/coreplanelabs/polylane-k8s/commit/2053028f66b219b4794c5bcfdd9eb38808cc699e))
+
 ## [0.2.2](https://github.com/coreplanelabs/polylane-k8s/compare/v0.2.1...v0.2.2) (2026-07-27)
 
 
