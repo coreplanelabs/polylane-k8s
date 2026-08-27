@@ -3,7 +3,7 @@ module github.com/coreplanelabs/polylane-k8s
 go 1.26.5
 
 require (
-	github.com/alecthomas/kong v1.16.0
+	github.com/alecthomas/kong v1.16.1
 	github.com/prometheus/client_golang v1.23.2
 	gopkg.in/yaml.v3 v3.0.1
 )
