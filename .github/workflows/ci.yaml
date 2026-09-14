@@ -16,7 +16,7 @@ env:
 
 jobs:
   do:
-    runs-on: ubuntu-24.04
+    runs-on: depot-ubuntu-24.04
     permissions:
       contents: read
     steps:
@@ -40,7 +40,7 @@ jobs:
         run: git diff --exit-code
 
   e2e:
-    runs-on: ubuntu-24.04
+    runs-on: depot-ubuntu-24.04
     permissions:
       contents: read
     steps:
@@ -63,7 +63,7 @@ jobs:
     needs:
       - do
       - e2e
-    runs-on: ubuntu-24.04
+    runs-on: depot-ubuntu-24.04
     permissions: {}
     steps:
       - name: Decide whether the needed jobs succeeded or failed
