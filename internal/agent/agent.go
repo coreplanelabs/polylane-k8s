@@ -28,6 +28,7 @@ import (
 	"github.com/coreplanelabs/polylane-k8s/internal/kube"
 	"github.com/coreplanelabs/polylane-k8s/internal/metrics"
 	"github.com/coreplanelabs/polylane-k8s/internal/platform"
+	"github.com/coreplanelabs/polylane-k8s/internal/serviceproxy"
 	"github.com/coreplanelabs/polylane-k8s/internal/shim"
 	"github.com/coreplanelabs/polylane-k8s/internal/tunnel"
 )
@@ -267,7 +268,14 @@ func Run(ctx context.Context, opts Options) error {
 		teardown()
 		return fmt.Errorf("agent: parsing kube API URL %q: %w", kc.BaseURL(), err)
 	}
+	services, err := serviceproxy.NewHandler(serviceproxy.Config{Services: cfg.Services, Resolve: kc.Service, Logger: log})
+	if err != nil {
+		teardown()
+		return fmt.Errorf("agent: service proxy: %w", err)
+	}
+	defer services.CloseIdleConnections()
 	shimHandler := shim.NewHandler(shim.Config{
+		ServiceProxy:  services,
 		Secret:        func() string { s, _ := shimSecret.Load().(string); return s },
 		UpstreamURL:   upstream,
 		Transport:     kc.Transport(),

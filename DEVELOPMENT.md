@@ -56,7 +56,7 @@ needs a human".
 `internal/shim` is the security boundary: a pass-through proxy in
 front of the kube API, bound only to loopback (config validation
 refuses anything else) and reached only through the tunnel. Every
-request runs an ordered, deny-first policy — auth, local health,
+Kubernetes request runs an ordered, deny-first policy — auth, local health,
 method, path hygiene, allowed roots (`/version`, `/api...`,
 `/apis...`), subresource denylist (`exec`, `attach`, `portforward`,
 `proxy`, ...), `secrets` paths denied outright, query validation
@@ -65,8 +65,45 @@ first failing rule decides the response with a fixed status code.
 Surviving requests are re-issued upstream as fresh GETs with a nil
 body and an allowlisted header set, with the ServiceAccount token
 attached per request, so writes, exec, watches, and protocol upgrades
-cannot transit the shim by construction. The package documentation in
+cannot transit the Kubernetes shim by construction. The package documentation in
 `internal/shim/shim.go` is the reference.
+
+### Service APIs through the shim
+
+After authenticating the shim secret, `/services` and `/services/<id>/...`
+dispatch to `internal/serviceproxy`. `config.services` binds each ID to
+one namespace, Service name, port, scheme, optional base path, and explicit
+method/path rules. The catalog reports this configuration, including an
+empty list when service access is disabled. Configuration is loaded at
+startup and changes require an agent restart; there is no registration
+change or additional control channel.
+
+For every permitted application request, `internal/kube/services.go`
+reads the current Service through the Kubernetes API. The proxy requires
+a ClusterIP Service with a Pod selector and the configured TCP service
+port. It rejects headless and ExternalName Services, selectorless Services,
+loopback, link-local and non-unicast addresses. The default Kubernetes API
+Service cannot be configured. The resolver uses the agent's existing
+Service read permission; service proxying needs no new RBAC grants.
+
+The proxy connects directly to the validated ClusterIP, avoiding DNS
+resolution and environment HTTP proxies. HTTP Host and TLS server name
+use `<name>.<namespace>.svc`; HTTPS validates against system roots
+(including the configured `SSL_CERT_FILE` CA bundle). Its HTTP transport
+is separate from the Kubernetes transport and never receives the
+ServiceAccount token. Only application Authorization, Accept, Content-Type
+and Content-Encoding headers are forwarded, excluding hop-by-hop headers.
+Tunnel credentials, cookies and forwarded identity headers stay out of
+the application request.
+
+The proxy enforces exact method/path pairs or a path prefix ending in `/`,
+rejects ambiguous paths and all redirects/upgrades, bounds request bodies
+to 1 MiB and responses to 32 MiB, and applies a 100-second deadline.
+An oversized or broken streaming response aborts the connection instead
+of completing a truncated response. Replies preserve provider status,
+content headers and Retry-After, with caching disabled. Application tokens
+and route policies establish application permissions; the Kubernetes
+GET-only policy applies independently to Kubernetes API requests.
 
 ### Credential rotation
 

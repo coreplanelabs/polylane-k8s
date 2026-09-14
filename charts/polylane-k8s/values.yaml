@@ -28,6 +28,17 @@ polylane:
 config: {}
 #  cluster_name: prod-us-east
 #  distribution: eks
+#  services:
+#    - id: grafana
+#      namespace: monitoring
+#      name: grafana
+#      port: 80
+#      scheme: http
+#      routes:
+#        - method: GET
+#          path_prefix: /api/
+#        - method: POST
+#          path: /api/ds/query
 
 stateSecret:
   # Name of the pre-created state Secret. Empty means <fullname>-state.

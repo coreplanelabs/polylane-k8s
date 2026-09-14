@@ -149,6 +149,13 @@ spec:
 		"--set", "tunnel.args={tunnel-stub,--listen,:2000}",
 		"--set", "config.platform_url=http://fakeplatform:8180",
 		"--set", "config.cluster_name=kind-e2e",
+		"--set", "config.services[0].id=platform-health",
+		"--set", "config.services[0].namespace="+namespace,
+		"--set", "config.services[0].name=fakeplatform",
+		"--set", "config.services[0].port=8180",
+		"--set", "config.services[0].scheme=http",
+		"--set", "config.services[0].routes[0].method=GET",
+		"--set", "config.services[0].routes[0].path=/healthz",
 	)
 	waitRollout(t, kctx, namespace, release)
 
@@ -216,6 +223,28 @@ spec:
 			if got := canI(t, c.verb, c.resource, c.extra...); got != c.want {
 				t.Errorf("can-i %s %s %v = %v, want %v", c.verb, c.resource, c.extra, got, c.want)
 			}
+		}
+	})
+
+	t.Run("ServiceProxy", func(t *testing.T) {
+		shimKey := decodeSecretKey(t, kctx, namespace, release+"-state", "shimSecret")
+		addr := portForward(t, kctx, namespace, "pod/"+podOf(t, kctx, namespace, release), 8080)
+		base := "http://" + addr
+		withKey := map[string]string{"x-polylane-shim-key": shimKey}
+		if status, body := httpGet(t, base+"/services", withKey); status != 200 || !strings.Contains(body, `"id":"platform-health"`) {
+			t.Fatalf("service catalog = %d %s", status, body)
+		}
+		if status, body := httpGet(t, base+"/services/platform-health/healthz", withKey); status != 200 {
+			t.Fatalf("service health through shim = %d %s", status, body)
+		}
+		if status, _ := httpGet(t, base+"/services/platform-health/healthz", nil); status != 401 {
+			t.Fatalf("unauthenticated service request = %d", status)
+		}
+		if status, _ := httpGet(t, base+"/services/platform-health/admin/registrations", withKey); status != 403 {
+			t.Fatalf("unconfigured service path = %d", status)
+		}
+		if status, _ := httpDo(t, "POST", base+"/services/platform-health/healthz", withKey); status != 403 {
+			t.Fatalf("unconfigured service method = %d", status)
 		}
 	})
 

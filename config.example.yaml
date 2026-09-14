@@ -33,6 +33,22 @@ shim:
   # that does not resolve to a loopback IP.
   listen: 127.0.0.1:8080
 
+# Explicitly allowed HTTP APIs, reached through /services/<id>/<path>.
+# Requests use the same shim secret plus the application's Authorization.
+# Port is the Service port, not the Pod's targetPort. Empty disables access.
+services: []
+#  - id: grafana
+#    namespace: monitoring
+#    name: grafana
+#    port: 80
+#    scheme: http
+#    base_path: /grafana # optional; omit when Grafana serves at /
+#    routes:
+#      - method: GET
+#        path_prefix: /api/
+#      - method: POST
+#        path: /api/ds/query
+
 ops:
   # The pod's ONLY cluster-facing surface: health probes and Prometheus
   # metrics.

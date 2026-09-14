@@ -223,8 +223,11 @@ func TestColdBootRegistersOnceAndPersists(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	cfg := testConfig(fk, fp, ready.URL)
+	cfg.Services = []config.Service{{ID: "grafana", Namespace: "monitoring", Name: "grafana", Port: 80, Scheme: "http",
+		Routes: []config.ServiceRoute{{Method: "POST", Path: "/api/ds/query"}}}}
 	h := startRun(t, ctx, Options{
-		Config:     testConfig(fk, fp, ready.URL),
+		Config:     cfg,
 		KubeClient: fk.client(t),
 	})
 
@@ -257,6 +260,22 @@ func TestColdBootRegistersOnceAndPersists(t *testing.T) {
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("shim /healthz with registered key = %d, want 200", resp.StatusCode)
+	}
+
+	req.URL.Path = "/services"
+	catalogResponse, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer catalogResponse.Body.Close()
+	var catalog struct {
+		Services []config.Service `json:"services"`
+	}
+	if err := json.NewDecoder(catalogResponse.Body).Decode(&catalog); err != nil {
+		t.Fatal(err)
+	}
+	if catalogResponse.StatusCode != http.StatusOK || len(catalog.Services) != 1 || catalog.Services[0].ID != "grafana" {
+		t.Fatalf("service catalog = %d %+v", catalogResponse.StatusCode, catalog)
 	}
 
 	cancel()
