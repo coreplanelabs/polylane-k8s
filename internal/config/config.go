@@ -38,6 +38,7 @@ type Config struct {
 	StateSecret StateSecret `yaml:"state_secret"`
 	Kube        Kube        `yaml:"kube"`
 	Log         Log         `yaml:"log"`
+	Services    []Service   `yaml:"services,omitempty"`
 }
 
 // Shim configures the read-only kube-API pass-through proxy. The shim is
@@ -147,6 +148,7 @@ func Load(path string) (Config, error) {
 // Validate checks the configuration for consistency.
 func (c *Config) Validate() error {
 	var errs []error
+	errs = append(errs, ValidateServices(c.Services))
 
 	switch u, err := url.Parse(c.PlatformURL); {
 	case c.PlatformURL == "":

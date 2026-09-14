@@ -2,13 +2,14 @@
 // pass-through proxy in front of the Kubernetes API, reached only through
 // the Cloudflare Tunnel and bound only to loopback (ListenLoopback).
 //
-// Every request runs an ordered, deny-first policy — auth, local health,
+// Kubernetes requests run an ordered, deny-first policy — auth, local health,
 // method, path hygiene, allowed roots, subresource denylist, secrets
 // denylist, query, upgrade — and the FIRST failing rule decides the
 // response with a fixed status code and an {"error":"<code>"} body.
 // Surviving requests are re-issued upstream as fresh GETs with a nil body
 // and an allowlisted header set, so writes, exec, watches, and protocol
-// upgrades cannot transit the shim by construction.
+// upgrades cannot transit the Kubernetes shim by construction. An optional
+// service proxy handles /services after the same shared-secret authentication.
 package shim
 
 import (
@@ -64,6 +65,7 @@ type MetricsRecorder interface {
 // Config wires the handler. Secret, UpstreamURL, and Token are required;
 // everything else has safe defaults.
 type Config struct {
+	ServiceProxy http.Handler
 	// Secret returns the CURRENT shim secret. It is a func, not a value, so
 	// the agent can swap it atomically when the platform rotates it; every
 	// request re-reads it. An empty secret never authenticates anything.
@@ -147,7 +149,7 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.cfg.Metrics.RecordRequest(outcome, d)
 	}
 	level := slog.LevelDebug
-	if outcome != outcomeProxied && outcome != outcomeHealthz {
+	if outcome != outcomeProxied && outcome != outcomeHealthz && outcome != "service_request" {
 		level = slog.LevelWarn
 	}
 	h.cfg.Logger.Log(r.Context(), level, "shim request",
@@ -181,6 +183,10 @@ func (h *handler) serve(w http.ResponseWriter, r *http.Request) (outcome string,
 		return outcomeHealthz, false
 	}
 
+	if h.cfg.ServiceProxy != nil && (r.URL.Path == "/services" || strings.HasPrefix(r.URL.Path, "/services/")) {
+		h.cfg.ServiceProxy.ServeHTTP(w, r)
+		return "service_request", false
+	}
 	// Rule 3 — read-only means GET, literally. HEAD is rejected too: it
 	// runs the same handlers upstream and complicates cap accounting for
 	// zero platform value.
