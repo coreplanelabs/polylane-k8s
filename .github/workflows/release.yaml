@@ -71,7 +71,7 @@ jobs:
           persist-credentials: false
 
       - name: Activate Hermit
-        uses: ./.github/actions/activate-hermit
+        uses: $/.github/actions/activate-hermit
         with:
           cache: "true"
 
