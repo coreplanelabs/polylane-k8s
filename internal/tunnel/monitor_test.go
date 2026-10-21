@@ -78,7 +78,10 @@ func startMonitor(t *testing.T, opts Options) *Monitor {
 	t.Cleanup(func() {
 		cancel()
 		select {
-		case <-done:
+		case err := <-done:
+			if !errors.Is(err, context.Canceled) {
+				t.Errorf("Run returned %v, want context.Canceled", err)
+			}
 		case <-time.After(testDeadline):
 			t.Error("monitor did not stop after cancel")
 		}
