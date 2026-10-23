@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.3.0](https://github.com/coreplanelabs/polylane-k8s/compare/v0.2.3...v0.3.0) (2026-10-23)
+
+
+### Features
+
+* **agent:** proxy allowlisted cluster service APIs through the tunnel ([#58](https://github.com/coreplanelabs/polylane-k8s/issues/58)) ([7f86ad4](https://github.com/coreplanelabs/polylane-k8s/commit/7f86ad4a82a5ea0f4584cba7b9248607262753ce))
+
+
+### Bug Fixes
+
+* **deps:** update module github.com/prometheus/client_golang to v1.25.0 ([#72](https://github.com/coreplanelabs/polylane-k8s/issues/72)) ([b7d21ca](https://github.com/coreplanelabs/polylane-k8s/commit/b7d21cafc736137e2e9ecf0539e461fbd5d6b949))
+* **tunnel:** check the monitor error in startMonitor cleanup ([#82](https://github.com/coreplanelabs/polylane-k8s/issues/82)) ([c352972](https://github.com/coreplanelabs/polylane-k8s/commit/c352972cccebcf440afd2428bc7a40a7667e3920))
+
 ## [0.2.3](https://github.com/coreplanelabs/polylane-k8s/compare/v0.2.2...v0.2.3) (2026-08-27)
 
 
