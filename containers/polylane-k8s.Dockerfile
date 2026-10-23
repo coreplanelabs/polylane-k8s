@@ -1,7 +1,7 @@
 # Build the polylane-k8s binary: static, CGO-free, distroless runtime.
 # Multi-arch: the build stage runs on the build host's platform and
 # cross-compiles for $TARGETARCH, so arm64 images do not pay the QEMU tax.
-FROM --platform=$BUILDPLATFORM golang:1.27@sha256:f24164268fc1e741bbdc0066dbadcf1c8426c5a8489f0729c02c3905a53032fd AS build
+FROM --platform=$BUILDPLATFORM golang:1.27@sha256:f20d83a83e18dbd2a4714b8ffd4b30b287b6243962dd75608e86abcc63ba4efc AS build
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
