@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.1](https://github.com/coreplanelabs/polylane-k8s/compare/v0.3.0...v0.3.1) (2026-10-24)
+
+
+### Bug Fixes
+
+* **release:** use cosign bundle output for goreleaser signing ([#87](https://github.com/coreplanelabs/polylane-k8s/issues/87)) ([62e3c24](https://github.com/coreplanelabs/polylane-k8s/commit/62e3c24f206f82bcf40cbc3a73b30255aaf76674))
+
 ## [0.3.0](https://github.com/coreplanelabs/polylane-k8s/compare/v0.2.3...v0.3.0) (2026-10-23)
 
 
