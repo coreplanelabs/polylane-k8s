@@ -40,20 +40,17 @@ archives:
 checksum:
   name_template: checksums.txt
 
-# Keyless cosign signature over checksums.txt: one blob signature covers
-# every archive (each is pinned by its checksum). cosign is hermit-pinned;
+# Keyless cosign signature over checksums.txt: one bundle covers every
+# archive (each is pinned by its checksum). cosign is hermit-pinned, and
+# cosign 3.x writes signature and certificate into a single bundle file;
 # the workflow grants id-token:write for the OIDC identity.
 signs:
   - cmd: cosign
-    signature: "${artifact}.sig"
-    certificate: "${artifact}.pem"
+    signature: "${artifact}.sigstore.json"
     args:
       - sign-blob
       - --yes
-      - --output-signature
-      - ${signature}
-      - --output-certificate
-      - ${certificate}
+      - --bundle=${signature}
       - ${artifact}
     artifacts: checksum
 
