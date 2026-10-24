@@ -129,7 +129,7 @@ cosign verify ghcr.io/coreplanelabs/charts/polylane-k8s:<version> \
 
 # Binary archives: verify checksums.txt, then the archives against it
 cosign verify-blob checksums.txt \
-  --signature checksums.txt.sig --certificate checksums.txt.pem \
+  --bundle checksums.txt.sigstore.json \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   --certificate-identity-regexp '^https://github.com/coreplanelabs/polylane-k8s/\.github/workflows/goreleaser\.yaml@' \
   && sha256sum --check --ignore-missing checksums.txt
