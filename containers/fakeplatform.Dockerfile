@@ -1,6 +1,6 @@
 # fakeplatform: hermetic Polylane registration-API simulator for the dev
 # environment and e2e tests. Never shipped.
-FROM golang:1.27@sha256:f20d83a83e18dbd2a4714b8ffd4b30b287b6243962dd75608e86abcc63ba4efc AS build
+FROM golang:1.27@sha256:9048d5e7751706200eb1719c7dae0436950d362f29a1da91fa05e5c63867c60f AS build
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
