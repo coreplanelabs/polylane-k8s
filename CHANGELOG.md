@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.2](https://github.com/coreplanelabs/polylane-k8s/compare/v0.3.1...v0.3.2) (2026-11-12)
+
+
+### Bug Fixes
+
+* **deps:** update module github.com/alecthomas/kong to v1.17.0 ([#97](https://github.com/coreplanelabs/polylane-k8s/issues/97)) ([7b146c5](https://github.com/coreplanelabs/polylane-k8s/commit/7b146c5e6a8652b76fbc90f51d1f7f47b151460d))
+
 ## [0.3.1](https://github.com/coreplanelabs/polylane-k8s/compare/v0.3.0...v0.3.1) (2026-10-26)
 
 
